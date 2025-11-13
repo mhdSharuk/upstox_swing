@@ -1,0 +1,29 @@
+# Upstox Supertrend Project Dependencies
+
+# API and HTTP requests
+requests>=2.31.0
+aiohttp>=3.9.0
+asyncio>=3.4.3
+
+# Data processing
+pandas>=2.1.0
+numpy>=1.24.0
+
+# Authentication
+pyotp>=2.9.0
+
+# Google Sheets
+gspread>=5.12.0
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.1.1
+
+# Data compression
+ijson>=3.2.3
+
+# Utilities
+python-dateutil>=2.8.2
+pytz>=2023.3
+
+# Optional: Progress bars
+tqdm>=4.66.0
