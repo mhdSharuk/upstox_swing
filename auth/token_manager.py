@@ -1,5 +1,6 @@
 """
 Token Manager - Handle Upstox access token validation and management
+UPDATED: Added webhook token saving for automated token refresh
 """
 
 import json
@@ -14,7 +15,7 @@ logger = get_logger(__name__)
 
 class TokenManager:
     """
-    Manage Upstox access tokens - validate, load, and refresh as needed
+    Manage Upstox access tokens - validate, load, refresh, and save from webhook
     """
     
     def __init__(self, token_file: str = "upstox_token.json"):
@@ -207,3 +208,84 @@ class TokenManager:
         except Exception as e:
             logger.error(f"Error saving token: {e}")
             return False
+    
+    def save_token_from_webhook(self, webhook_data: Dict) -> bool:
+        """
+        Save token received from Upstox webhook callback
+        This is called by the Flask webhook endpoint
+        
+        Args:
+            webhook_data: Dictionary containing webhook payload from Upstox
+                Expected keys:
+                - access_token: The access token string
+                - user_id: User ID
+                - issued_at: Token issued timestamp
+                - expires_at: Token expiry timestamp
+                - message_type: Should be 'access_token'
+        
+        Returns:
+            bool: True if token saved successfully
+        """
+        try:
+            # Validate webhook data
+            if webhook_data.get('message_type') != 'access_token':
+                logger.error(f"Invalid message type: {webhook_data.get('message_type')}")
+                return False
+            
+            access_token = webhook_data.get('access_token')
+            if not access_token:
+                logger.error("No access token in webhook data")
+                return False
+            
+            # Extract user info from webhook
+            user_info = {
+                'user_id': webhook_data.get('user_id', ''),
+                'user_name': webhook_data.get('user_id', ''),  # Webhook doesn't provide full name
+                'email': '',  # Webhook doesn't provide email
+                'issued_at': webhook_data.get('issued_at', ''),
+                'expires_at': webhook_data.get('expires_at', '')
+            }
+            
+            # Save using existing save_token method
+            success = self.save_token(access_token, user_info)
+            
+            if success:
+                logger.info("=" * 60)
+                logger.info("✓ TOKEN SAVED FROM WEBHOOK!")
+                logger.info("=" * 60)
+                logger.info(f"User ID: {user_info['user_id']}")
+                logger.info(f"Issued at: {user_info['issued_at']}")
+                logger.info(f"Expires at: {user_info['expires_at']}")
+                logger.info(f"Saved to: {self.token_file}")
+                logger.info("=" * 60)
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error saving token from webhook: {e}")
+            return False
+    
+    def get_token_info(self) -> Dict:
+        """
+        Get detailed information about the current token
+        Useful for debugging and monitoring
+        
+        Returns:
+            dict: Token information including validity status
+        """
+        info = {
+            'token_file': self.token_file,
+            'token_exists': os.path.exists(self.token_file),
+            'token_loaded': self.access_token is not None,
+            'token_timestamp': self.token_timestamp,
+            'user_id': self.user_info.get('user_id', 'N/A'),
+            'user_name': self.user_info.get('user_name', 'N/A'),
+            'is_likely_expired': self.is_token_likely_expired() if self.access_token else True,
+            'is_valid': None  # Will be set after API validation
+        }
+        
+        # Validate token if loaded
+        if self.access_token:
+            info['is_valid'] = self.validate_token()
+        
+        return info

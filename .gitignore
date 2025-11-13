@@ -1,8 +1,32 @@
-# Python
+# Upstox Supertrend Project - .gitignore
+
+# ==================== CRITICAL SECURITY FILES ====================
+# NEVER commit these files to Git!
+
+# Credentials and secrets
+config/credentials.py
+service_account.json
+
+# Token files
+upstox_token.json
+*.token
+*.json.bak
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# ==================== PYTHON ====================
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
 *.so
+
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -16,48 +40,106 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual Environment
+# PyInstaller
+*.manifest
+*.spec
+
+# Virtual environments
 venv/
-ENV/
 env/
+ENV/
+env.bak/
+venv.bak/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Credentials and Secrets
-credentials.py
-service_account.json
-upstox_token.json
-*.key
-*.pem
-
-# Logs
+# ==================== LOGS ====================
 *.log
 logs/
+*.log.*
 
-# Output files
-*.csv
-instrument_mapping.csv
-intraday_candles.csv
+# ==================== IDE ====================
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
 
 # Jupyter Notebook
-.ipynb_checkpoints
+.ipynb_checkpoints/
 
-# pytest
+# ==================== OS ====================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# ==================== PROJECT SPECIFIC ====================
+# Temporary data files
+data/
+temp/
+tmp/
+*.tmp
+
+# Backup files
+*.bak
+*~.nib
+*.swp
+*.swo
+
+# CSV/Excel outputs (optional - uncomment if you don't want to track these)
+# *.csv
+# *.xlsx
+
+# Database files (if any)
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache directories
+.cache/
 .pytest_cache/
-.coverage
-htmlcov/
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# ==================== PYTHONANYWHERE ====================
+# PythonAnywhere specific files (if downloading from server)
+*.pyc.orig
+
+# ==================== NOTES ====================
+# Files that MUST be kept secret:
+# - config/credentials.py (contains API keys and secrets)
+# - service_account.json (Google Cloud credentials)
+# - upstox_token.json (access token)
+# - .env files (environment variables)
+
+# Files that are OK to commit:
+# - config/settings.py (public configuration)
+# - config_credentials_TEMPLATE.py (template without real values)
+# - All code files (*.py except credentials.py)
+# - Documentation (*.md)
+# - requirements.txt

@@ -1,5 +1,8 @@
 # Upstox Supertrend Project Dependencies
 
+# Web Framework (for PythonAnywhere deployment)
+Flask>=3.0.0
+
 # API and HTTP requests
 requests>=2.31.0
 aiohttp>=3.9.0
