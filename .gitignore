@@ -6,7 +6,9 @@
 # Credentials and secrets
 config/credentials.py
 service_account.json
-
+instrument_mapping.csv
+QUICKSTART.md
+daily.csv
 # Token files
 upstox_token.json
 *.token
@@ -125,7 +127,6 @@ htmlcov/
 .coverage.*
 coverage.xml
 *.cover
-
 # ==================== PYTHONANYWHERE ====================
 # PythonAnywhere specific files (if downloading from server)
 *.pyc.orig
