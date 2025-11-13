@@ -16,7 +16,7 @@ from config.settings import (
     SUPERTREND_CONFIGS_DAILY,
     TIMEFRAME_CONFIG
 )
-from config.credentials import (
+from config.env_loader  import (
     UPSTOX_API_KEY,
     UPSTOX_API_SECRET,
     UPSTOX_REDIRECT_URI,

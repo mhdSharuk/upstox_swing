@@ -1,6 +1,8 @@
 """
 Flask Application for Upstox Supertrend - PythonAnywhere Deployment
 Handles token requests, webhook callbacks, and scheduled job execution
+
+UPDATED: Now uses environment variables via config.env_loader
 """
 
 from flask import Flask, request, jsonify
@@ -14,8 +16,8 @@ import logging
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Import project modules
-from config.credentials import (
+# Import project modules - NOW USING ENV_LOADER
+from config.env_loader import (
     UPSTOX_API_KEY,
     UPSTOX_API_SECRET,
     FLASK_SECRET_KEY,
@@ -69,6 +71,7 @@ def health_check():
         'status': 'running',
         'app': 'Upstox Supertrend Pipeline',
         'timestamp': datetime.now().isoformat(),
+        'config_source': 'environment_variables',
         'endpoints': {
             'health': '/health',
             'request_token': '/request-token?secret=YOUR_SECRET',
@@ -313,7 +316,7 @@ def run_job():
         
         # Initialize sheets writer if not already done
         if not pipeline.sheets_writer:
-            from config.credentials import GOOGLE_SHEET_ID, SERVICE_ACCOUNT_FILE
+            from config.env_loader import GOOGLE_SHEET_ID, SERVICE_ACCOUNT_FILE
             from storage.sheets_writer import GoogleSheetsWriter
             pipeline.sheets_writer = GoogleSheetsWriter(GOOGLE_SHEET_ID, SERVICE_ACCOUNT_FILE)
             if not pipeline.sheets_writer.authenticate():
