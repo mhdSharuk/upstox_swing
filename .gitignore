@@ -9,6 +9,8 @@ service_account.json
 instrument_mapping.csv
 QUICKSTART.md
 daily.csv
+swing_venv
+swing_venv/*
 # Token files
 upstox_token.json
 *.token

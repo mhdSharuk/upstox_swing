@@ -1,10 +1,11 @@
 """
 Flat Base Detector - Detect flat base patterns in supertrend values
-Optimized with vectorized NumPy/Pandas operations
+Optimized with Numba for high performance
 """
 
 import pandas as pd
 import numpy as np
+from numba import njit
 from typing import List
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing as mp
@@ -15,9 +16,10 @@ from utils.validators import DataValidator
 logger = get_logger(__name__)
 
 
-def _detect_flat_base_vectorized(supertrend_values: np.ndarray, tolerance: float) -> np.ndarray:
+@njit(cache=True)
+def _detect_flat_base_numba(supertrend_values: np.ndarray, tolerance: float) -> np.ndarray:
     """
-    Vectorized flat base detection
+    Numba-optimized flat base detection
     
     Flat Base Definition:
     - Consecutive candles where supertrend values remain within tolerance
@@ -34,24 +36,29 @@ def _detect_flat_base_vectorized(supertrend_values: np.ndarray, tolerance: float
     n = len(supertrend_values)
     flat_base_count = np.zeros(n, dtype=np.int32)
     
-    # Calculate percentage differences
-    prev_values = np.roll(supertrend_values, 1)
-    prev_values[0] = np.nan
-    
-    # Avoid division by zero
-    mask = (prev_values != 0) & (~np.isnan(prev_values)) & (~np.isnan(supertrend_values))
-    
-    pct_diff = np.full(n, np.inf)
-    pct_diff[mask] = np.abs((supertrend_values[mask] - prev_values[mask]) / prev_values[mask])
-    
-    # Determine which positions are within tolerance
-    is_flat = pct_diff <= tolerance
-    
-    # Calculate consecutive counts
     for i in range(1, n):
-        if is_flat[i]:
+        current = supertrend_values[i]
+        previous = supertrend_values[i - 1]
+        
+        # Skip if either value is NaN
+        if np.isnan(current) or np.isnan(previous):
+            flat_base_count[i] = 0
+            continue
+        
+        # Skip if previous is zero (to avoid division by zero)
+        if previous == 0:
+            flat_base_count[i] = 0
+            continue
+        
+        # Calculate percentage difference
+        pct_diff = abs((current - previous) / previous)
+        
+        # Check if within tolerance
+        if pct_diff <= tolerance:
+            # Increment count from previous
             flat_base_count[i] = flat_base_count[i - 1] + 1
         else:
+            # Reset count to 1 (current candle is a new base)
             flat_base_count[i] = 1
     
     return flat_base_count
@@ -60,7 +67,7 @@ def _detect_flat_base_vectorized(supertrend_values: np.ndarray, tolerance: float
 class FlatBaseDetector:
     """
     Detect flat base periods in supertrend values
-    Optimized with vectorized NumPy/Pandas operations
+    Optimized with Numba for high-performance computation
     
     Flat Base Definition:
     - Consecutive candles where supertrend values remain within 0.1% tolerance
@@ -95,11 +102,11 @@ class FlatBaseDetector:
         Returns:
             pd.Series: Flat base count for each row
         """
-        # Convert to numpy array
+        # Convert to numpy array for Numba processing
         supertrend_np = supertrend_series.values
         
-        # Calculate flat base counts using vectorized function
-        flat_base_count_np = _detect_flat_base_vectorized(supertrend_np, self.tolerance)
+        # Calculate flat base counts using Numba-optimized function
+        flat_base_count_np = _detect_flat_base_numba(supertrend_np, self.tolerance)
         
         # Convert back to pandas Series
         return pd.Series(flat_base_count_np, index=supertrend_series.index)
@@ -129,7 +136,7 @@ class FlatBaseDetector:
                 logger.warning(f"Supertrend column '{supertrend_col}' not found, skipping")
                 continue
             
-            # Detect flat bases
+            # Detect flat bases using Numba-optimized function
             flat_base_series = self.detect_flat_base(
                 df[supertrend_col],
                 config_name
@@ -174,7 +181,7 @@ class FlatBaseDetector:
                 logger.warning(f"{symbol}: Empty dataframe, skipping")
                 return (symbol, None)
             
-            # Create a temporary detector instance
+            # Create a temporary detector instance for this process
             detector = FlatBaseDetector(tolerance=tolerance)
             detector.min_count = min_count
             
@@ -200,7 +207,7 @@ class FlatBaseDetector:
             dict: Updated dictionary with flat base counts
         """
         logger.info(f"Calculating flat base counts for {len(df_by_symbol)} symbols...")
-        logger.info(f"Using {self.n_jobs} parallel workers")
+        logger.info(f"Using {self.n_jobs} parallel workers with Numba acceleration")
         
         config_names = [config['name'] for config in configs]
         updated_dfs = {}

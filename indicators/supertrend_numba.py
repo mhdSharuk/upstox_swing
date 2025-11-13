@@ -1,10 +1,11 @@
 """
-Supertrend Calculator - Optimized with vectorized NumPy/Pandas operations
-Matches Pine Script exactly, without Numba dependency
+Supertrend Calculator - FIXED to match Pine Script exactly
+Optimized with Numba for high performance
 """
 
 import pandas as pd
 import numpy as np
+from numba import njit
 from typing import Dict, Optional, Tuple, List
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
@@ -15,7 +16,8 @@ from utils.validators import DataValidator
 logger = get_logger(__name__)
 
 
-def _calculate_supertrend_vectorized(
+@njit(cache=True)
+def _calculate_supertrend_numba(
     high: np.ndarray,
     low: np.ndarray,
     close: np.ndarray,
@@ -25,7 +27,7 @@ def _calculate_supertrend_vectorized(
     atr_multiplier: float
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Vectorized supertrend calculation matching Pine Script exactly
+    Numba-optimized supertrend calculation matching Pine Script exactly
     
     Args:
         high: High prices array
@@ -40,57 +42,75 @@ def _calculate_supertrend_vectorized(
         Tuple: (supertrend, direction, upperBand, lowerBand) arrays
     """
     n = len(high)
+    upperBand = np.empty(n, dtype=np.float64)
+    lowerBand = np.empty(n, dtype=np.float64)
+    supertrend = np.empty(n, dtype=np.float64)
+    direction = np.empty(n, dtype=np.float64)
     
-    # Initialize arrays
-    upperBand = np.full(n, np.nan, dtype=np.float64)
-    lowerBand = np.full(n, np.nan, dtype=np.float64)
-    supertrend = np.full(n, np.nan, dtype=np.float64)
-    direction = np.full(n, np.nan, dtype=np.float64)
-    
-    # Calculate initial bands
-    upperBand = source + atr_multiplier * atr
-    lowerBand = source - atr_multiplier * atr
-    
-    # Adjust bands based on previous values
-    for i in range(1, n):
-        prev_lowerBand = lowerBand[i-1] if not np.isnan(lowerBand[i-1]) else lowerBand[i]
-        prev_upperBand = upperBand[i-1] if not np.isnan(upperBand[i-1]) else upperBand[i]
-        prev_hl2 = hl2[i-1]
-        
-        # Adjust lowerBand
-        if lowerBand[i] > prev_lowerBand or prev_hl2 < prev_lowerBand:
-            lowerBand[i] = lowerBand[i]
-        else:
-            lowerBand[i] = prev_lowerBand
-        
-        # Adjust upperBand
-        if upperBand[i] < prev_upperBand or prev_hl2 > prev_upperBand:
-            upperBand[i] = upperBand[i]
-        else:
-            upperBand[i] = prev_upperBand
-    
-    # Determine direction and supertrend
+    # Initialize all arrays with NaN
     for i in range(n):
+        upperBand[i] = np.nan
+        lowerBand[i] = np.nan
+        supertrend[i] = np.nan
+        direction[i] = np.nan
+    
+    # Calculate bands and supertrend
+    for i in range(n):
+        # Calculate basic bands
+        upperBand[i] = source[i] + atr_multiplier * atr[i]
+        lowerBand[i] = source[i] - atr_multiplier * atr[i]
+        
+        # Adjust bands based on previous values (matching Pine Script exactly)
+        if i > 0:
+            # Get previous values (nz() in Pine Script returns 0 for na, but here we use the current value if prev is nan)
+            prev_lowerBand = lowerBand[i-1] if not np.isnan(lowerBand[i-1]) else lowerBand[i]
+            prev_upperBand = upperBand[i-1] if not np.isnan(upperBand[i-1]) else upperBand[i]
+            prev_hl2 = hl2[i-1]
+            
+            # Pine Script: lowerBand := lowerBand > prevLowerBand or hl2[1] < prevLowerBand ? lowerBand : prevLowerBand
+            if lowerBand[i] > prev_lowerBand or prev_hl2 < prev_lowerBand:
+                lowerBand[i] = lowerBand[i]
+            else:
+                lowerBand[i] = prev_lowerBand
+            
+            # Pine Script: upperBand := upperBand < prevUpperBand or hl2[1] > prevUpperBand ? upperBand : prevUpperBand
+            if upperBand[i] < prev_upperBand or prev_hl2 > prev_upperBand:
+                upperBand[i] = upperBand[i]
+            else:
+                upperBand[i] = prev_upperBand
+        
+        # Determine direction and supertrend (matching Pine Script logic)
         if i == 0 or np.isnan(atr[i-1]):
+            # Pine Script: if na(st_atr[1]) direction := 1
             direction[i] = 1
         else:
+            # Get ADJUSTED previous bands (this was the bug!)
             prev_supertrend = supertrend[i-1]
             prev_upperBand = upperBand[i-1]
             prev_lowerBand = lowerBand[i-1]
             current_hl2 = hl2[i]
             
+            # Pine Script logic:
+            # else if prevSuperTrend == prevUpperBand
+            #     direction := hl2 > upperBand ? -1 : 1
+            # else
+            #     direction := hl2 < lowerBand ? 1 : -1
+            
             if prev_supertrend == prev_upperBand:
+                # Was in uptrend (direction = 1, supertrend = upperBand)
                 if current_hl2 > upperBand[i]:
-                    direction[i] = -1
+                    direction[i] = -1  # Switch to downtrend
                 else:
-                    direction[i] = 1
+                    direction[i] = 1  # Stay in uptrend
             else:
+                # Was in downtrend (direction = -1, supertrend = lowerBand)
                 if current_hl2 < lowerBand[i]:
-                    direction[i] = 1
+                    direction[i] = 1  # Switch to uptrend
                 else:
-                    direction[i] = -1
+                    direction[i] = -1  # Stay in downtrend
         
         # Set supertrend based on direction
+        # Pine Script: superTrend := direction == -1 ? lowerBand : upperBand
         if direction[i] == -1:
             supertrend[i] = lowerBand[i]
         else:
@@ -99,9 +119,10 @@ def _calculate_supertrend_vectorized(
     return supertrend, direction, upperBand, lowerBand
 
 
-def _calculate_sma_vectorized(values: np.ndarray, period: int) -> np.ndarray:
+@njit(cache=True)
+def _calculate_sma_numba(values: np.ndarray, period: int) -> np.ndarray:
     """
-    Vectorized Simple Moving Average calculation
+    Numba-optimized Simple Moving Average calculation
     
     Args:
         values: Input array
@@ -110,9 +131,17 @@ def _calculate_sma_vectorized(values: np.ndarray, period: int) -> np.ndarray:
     Returns:
         np.ndarray: SMA values
     """
-    # Use pandas for efficient rolling window
-    series = pd.Series(values)
-    sma = series.rolling(window=period, min_periods=1).mean().values
+    n = len(values)
+    sma = np.empty(n, dtype=np.float64)
+    
+    for i in range(n):
+        if i < period - 1:
+            # For the first period-1 values, use expanding window
+            sma[i] = np.mean(values[:i+1])
+        else:
+            # Use rolling window
+            sma[i] = np.mean(values[i-period+1:i+1])
+    
     return sma
 
 
@@ -152,13 +181,18 @@ def _calculate_supertrend_worker(args: tuple) -> Tuple[str, pd.DataFrame, Dict]:
 class SupertrendCalculator:
     """
     Calculate custom Supertrend indicator matching Pine Script logic EXACTLY
-    Optimized with vectorized NumPy/Pandas operations
+    Optimized with Numba for high performance
     
     Pine Script Reference:
     - HL2 = (high + low) / 2
     - ATR = ta.atr() uses RMA (exponential moving average)
     - use_ema parameter: When True, use SMA of HL2; when False, use raw HL2
     - direction: -1 (downtrend/below supertrend), 1 (uptrend/above supertrend)
+    
+    FIXED ISSUES:
+    1. ATR now uses RMA (EMA) instead of SMA
+    2. Direction logic now compares with ADJUSTED previous bands
+    3. Initial supertrend correctly set based on direction
     """
     
     def __init__(self):
@@ -195,7 +229,7 @@ class SupertrendCalculator:
                 logger.error(f"Missing required column: {col}")
                 return df
         
-        # Calculate ATR using RMA
+        # Calculate ATR using RMA (like Pine Script's ta.atr())
         atr = self.atr_calculator.calculate_atr(
             df['high'],
             df['low'],
@@ -205,19 +239,22 @@ class SupertrendCalculator:
         
         # Calculate source (HL2 with or without SMA)
         if use_sma:
-            source_np = _calculate_sma_vectorized(df['hl2'].values, atr_period)
+            # Use SMA of HL2 (when use_ema=true in Pine Script)
+            hl2_np = df['hl2'].values
+            source_np = _calculate_sma_numba(hl2_np, atr_period)
         else:
+            # Use raw HL2 (when use_ema=false in Pine Script)
             source_np = df['hl2'].values
         
-        # Convert to numpy arrays
+        # Convert to numpy arrays for Numba processing
         high_np = df['high'].values
         low_np = df['low'].values
         close_np = df['close'].values
         hl2_np = df['hl2'].values
         atr_np = atr.values
         
-        # Calculate supertrend using vectorized function
-        supertrend_np, direction_np, upperBand_np, lowerBand_np = _calculate_supertrend_vectorized(
+        # Calculate supertrend using Numba-optimized function
+        supertrend_np, direction_np, upperBand_np, lowerBand_np = _calculate_supertrend_numba(
             high_np, low_np, close_np, hl2_np, atr_np, source_np, atr_multiplier
         )
         
@@ -278,6 +315,7 @@ class SupertrendCalculator:
     ) -> Dict:
         """
         Extract state variables for incremental calculation
+        These variables enable O(1) updates when new candles arrive
         
         Args:
             df: DataFrame with calculated supertrend
@@ -325,18 +363,20 @@ class SupertrendCalculator:
         """
         num_symbols = len(df_by_symbol)
         
-        # For small datasets (<50 symbols), sequential is faster
+        # Determine if parallel processing is beneficial
+        # For small datasets (<50 symbols), sequential is faster due to overhead
         if not use_parallel or num_symbols < 50:
-            logger.info(f"Calculating supertrends sequentially for {num_symbols} symbols...")
+            logger.info(f"Calculating supertrends sequentially for {num_symbols} symbols (Numba-optimized)...")
             return self._calculate_sequential(df_by_symbol, configs, timeframe)
         
         # Use parallel processing for larger datasets
         if max_workers is None:
-            max_workers = max(1, cpu_count() - 1)
+            max_workers = max(1, cpu_count() - 1)  # Leave one core free
         
+        # Cap workers at reasonable maximum
         max_workers = min(max_workers, num_symbols, 16)
         
-        logger.info(f"Calculating supertrends for {num_symbols} symbols using {max_workers} parallel workers...")
+        logger.info(f"Calculating supertrends for {num_symbols} symbols using {max_workers} parallel workers (Numba-optimized)...")
         
         return self._calculate_parallel(df_by_symbol, configs, timeframe, max_workers)
     
@@ -346,7 +386,17 @@ class SupertrendCalculator:
         configs: list,
         timeframe: str
     ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Dict]]:
-        """Sequential calculation"""
+        """
+        Sequential calculation (original implementation)
+        
+        Args:
+            df_by_symbol: Dictionary mapping symbol to DataFrame
+            configs: List of supertrend configurations
+            timeframe: Timeframe identifier
+        
+        Returns:
+            Tuple: (calculated_dataframes, state_variables_by_symbol)
+        """
         calculated_dfs = {}
         states = {}
         
@@ -358,9 +408,11 @@ class SupertrendCalculator:
                 progress.update()
                 continue
             
+            # Calculate all supertrends for this symbol
             df_with_st = self.calculate_multiple_supertrends(df, configs)
             calculated_dfs[symbol] = df_with_st
             
+            # Extract state variables for all configs
             symbol_state = {}
             for config in configs:
                 config_state = self.get_state_variables(df_with_st, config['name'])
@@ -380,10 +432,22 @@ class SupertrendCalculator:
         timeframe: str,
         max_workers: int
     ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Dict]]:
-        """Parallel calculation"""
+        """
+        Parallel calculation using ProcessPoolExecutor
+        
+        Args:
+            df_by_symbol: Dictionary mapping symbol to DataFrame
+            configs: List of supertrend configurations
+            timeframe: Timeframe identifier
+            max_workers: Number of parallel workers
+        
+        Returns:
+            Tuple: (calculated_dataframes, state_variables_by_symbol)
+        """
         calculated_dfs = {}
         states = {}
         
+        # Prepare arguments for parallel processing
         args_list = [
             (symbol, df, configs)
             for symbol, df in df_by_symbol.items()
@@ -395,12 +459,15 @@ class SupertrendCalculator:
             return {}, {}
         
         try:
+            # Use ProcessPoolExecutor for parallel processing
             with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all jobs
                 future_to_symbol = {
                     executor.submit(_calculate_supertrend_worker, args): args[0]
                     for args in args_list
                 }
                 
+                # Collect results with progress tracking
                 progress = ProgressLogger(
                     len(future_to_symbol),
                     f"Calculating {timeframe} supertrends (parallel)",
