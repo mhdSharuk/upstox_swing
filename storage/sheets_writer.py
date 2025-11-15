@@ -1,5 +1,6 @@
 """
 Google Sheets Writer - Write calculated data to Google Sheets
+UPDATED: Removed upperBand/lowerBand, reordered columns (calculations first, company info last)
 """
 
 import gspread
@@ -267,34 +268,101 @@ class GoogleSheetsWriter:
         timeframe: str,
         configs: List[dict]
     ) -> pd.DataFrame:
-
-        retention = CANDLE_RETENTION.get(timeframe, 100)
+        """
+        Prepare DataFrame for upload to Google Sheets
+        UPDATED: 
+        - Keep latest 3 candles per symbol (retention = 3)
+        - Remove upperBand and lowerBand columns
+        - Reorder columns: calculations first, company info (sector/industry/market_cap) last
+        - Clean NaN, Infinity values for JSON compliance
+        """
+        retention = CANDLE_RETENTION.get(timeframe, 3)
         
         logger.info(f"Preparing {timeframe} data for upload...")
         logger.info(f"  Retention: Latest {retention} candles per symbol")
         
+        # Keep latest 3 candles per symbol
         df_prepared = df.groupby('trading_symbol').apply(
             lambda x: x.nlargest(retention, 'timestamp')
         ).reset_index(drop=True)
         
         df_prepared = df_prepared.sort_values(['trading_symbol', 'timestamp']).reset_index(drop=True)
         
+        # Define column order: calculations first, company info last
+        # Base columns (OHLC data)
         base_columns = ['trading_symbol', 'timestamp', 'open', 'high', 'low', 'close', 'hl2']
         
+        # Supertrend and calculation columns for each config
+        calculation_columns = []
         for config in configs:
             name = config['name']
-            base_columns.extend([
+            calculation_columns.extend([
                 f'supertrend_{name}',
+                f'pct_diff_avg3_{name}',
+                f'pct_diff_latest_{name}',
                 f'direction_{name}',
                 f'flatbase_count_{name}'
             ])
         
-        available_columns = [col for col in base_columns if col in df_prepared.columns]
+        # Company info columns (at the end)
+        company_info_columns = ['sector', 'industry', 'market_cap']
+        
+        # Combine all columns in the desired order
+        all_columns = base_columns + calculation_columns + company_info_columns
+        
+        # Filter to only include columns that exist in the dataframe
+        available_columns = [col for col in all_columns if col in df_prepared.columns]
+        
+        # Note: upperBand and lowerBand are automatically excluded since they're not in all_columns
+        
         df_prepared = df_prepared[available_columns]
+        
+        # CRITICAL: Clean data for JSON compliance
+        # Replace NaN, Infinity, -Infinity with None (which becomes null in JSON)
+        df_prepared = self._clean_data_for_json(df_prepared)
+        
         df_prepared['timestamp'] = df_prepared['timestamp'].astype(str)
         
         logger.info(f"✓ Prepared {len(df_prepared)} rows with {len(available_columns)} columns")
+        logger.info(f"  Columns: {', '.join(available_columns[:10])}{'...' if len(available_columns) > 10 else ''}")
+        
         return df_prepared
+    
+    def _clean_data_for_json(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Clean DataFrame to ensure JSON compliance for Google Sheets
+        Replaces NaN, Infinity, -Infinity with None
+        
+        Args:
+            df: DataFrame to clean
+        
+        Returns:
+            pd.DataFrame: Cleaned DataFrame
+        """
+        import numpy as np
+        
+        # Make a copy to avoid modifying original
+        df_clean = df.copy()
+        
+        # Count issues before cleaning
+        nan_count = df_clean.isna().sum().sum()
+        inf_count = np.isinf(df_clean.select_dtypes(include=[np.number])).sum().sum()
+        
+        if nan_count > 0 or inf_count > 0:
+            logger.info(f"  Cleaning data: {nan_count} NaN values, {inf_count} Infinity values")
+        
+        # Replace NaN with None (becomes null in JSON)
+        df_clean = df_clean.where(pd.notna(df_clean), None)
+        
+        # Replace Infinity and -Infinity with None for numeric columns
+        numeric_cols = df_clean.select_dtypes(include=[np.number]).columns
+        for col in numeric_cols:
+            # Replace inf and -inf with None
+            df_clean[col] = df_clean[col].replace([np.inf, -np.inf], None)
+        
+        logger.info(f"  ✓ Data cleaned for JSON compliance")
+        
+        return df_clean
     
 
     # -------------------------------------------------------------------------
@@ -306,6 +374,9 @@ class GoogleSheetsWriter:
 
         try:
             logger.info(f"Writing {len(df)} rows to {worksheet.title}...")
+            
+            df.fillna('None', inplace=True)
+            # df.to_csv('write_worksheet_title.csv', index=False)
 
             # HEADER + ROWS
             data = [df.columns.tolist()] + df.values.tolist()
@@ -400,7 +471,16 @@ class GoogleSheetsWriter:
         data_dict: Dict[str, pd.DataFrame],
         configs_dict: Dict[str, List[dict]]
     ) -> bool:
-
+        """
+        Write all timeframe data to Google Sheets
+        
+        Args:
+            data_dict: Dictionary mapping timeframe to combined DataFrame
+            configs_dict: Dictionary mapping timeframe to configs
+        
+        Returns:
+            bool: True if all writes successful
+        """
         if not self.client or not self.spreadsheet:
             logger.error("Not authenticated. Call authenticate() first.")
             return False

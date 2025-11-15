@@ -15,7 +15,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 env_file = PROJECT_ROOT / '.env'
 if env_file.exists():
     load_dotenv(env_file)
-    print(f"✓ Loaded environment variables from {env_file}")
+    # print(f"✓ Loaded environment variables from {env_file}")
 else:
     print(f"⚠ No .env file found at {env_file}, using system environment variables")
 
@@ -100,7 +100,8 @@ if not is_valid:
         print("  2. Set environment variables in your system")
         print("  3. Create config/credentials.py")
 else:
-    print("✓ All required credentials loaded from environment variables")
+    pass
+    # print("✓ All required credentials loaded from environment variables")
 
 
 # ==================== EXPORT ALL ====================

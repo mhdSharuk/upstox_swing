@@ -9,7 +9,7 @@ from numba import njit
 from typing import Dict, Optional, Tuple, List
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
-from .atr import ATRCalculator
+from .atr_numba import ATRCalculator
 from utils.logger import get_logger, ProgressLogger
 from utils.validators import DataValidator
 
