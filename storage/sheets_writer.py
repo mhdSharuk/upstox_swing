@@ -1,30 +1,19 @@
-"""
-Google Sheets Writer - Write calculated data to Google Sheets
-UPDATED: Removed upperBand/lowerBand, reordered columns (calculations first, company info last)
-"""
-
-import gspread
-from google.oauth2.service_account import Credentials
-import pandas as pd
+import os
 import time
 import json
+import gspread
+import pandas as pd
+
 from typing import Dict, List, Optional
-from config.settings import SHEETS_CONFIG, CANDLE_RETENTION
+from google.oauth2.service_account import Credentials
+
 from utils.logger import get_logger, ProgressLogger
+from config.settings import SHEETS_CONFIG, CANDLE_RETENTION
 
 logger = get_logger(__name__)
 
-
 class GoogleSheetsWriter:
-    """
-    Write data to Google Sheets with batching and error handling
-    """
-    
-    def __init__(
-        self,
-        sheet_id: str,
-        service_account_file: str
-    ):
+    def __init__(self, sheet_id: str, service_account_file: str):
         """
         Initialize Google Sheets Writer
         
@@ -39,8 +28,6 @@ class GoogleSheetsWriter:
         self.client: Optional[gspread.Client] = None
         self.spreadsheet: Optional[gspread.Spreadsheet] = None
 
-
-    # ✅ ✅ ADDED: Auto-resize helper ------------------------------------------
     def _ensure_capacity(self, worksheet, rows_needed: int, cols_needed: int):
         """
         Ensure worksheet has enough rows/columns before uploading.
@@ -63,8 +50,6 @@ class GoogleSheetsWriter:
             logger.error(f"Failed to expand worksheet grid: {e}")
             raise
 
-
-    # -------------------------------------------------------------------------
     def test_authentication(self) -> tuple[bool, str]:
         """
         Test authentication and access to Google Sheets
@@ -77,43 +62,40 @@ class GoogleSheetsWriter:
         logger.info("TESTING GOOGLE SHEETS AUTHENTICATION")
         logger.info("=" * 20)
         
-        # Step 1: Check if service account file exists
-        import os
         if not os.path.exists(self.service_account_file):
-            error_msg = f"❌ Service account file not found: {self.service_account_file}"
+            error_msg = f"Service account file not found: {self.service_account_file}"
             logger.error(error_msg)
             return False, error_msg
         
-        logger.info(f"✓ Service account file found: {self.service_account_file}")
+        logger.info(f"Service account file found: {self.service_account_file}")
         
-        # Step 2: Validate JSON file
         try:
             with open(self.service_account_file, 'r') as f:
                 sa_data = json.load(f)
                 client_email = sa_data.get('client_email', 'NOT FOUND')
                 project_id = sa_data.get('project_id', 'NOT FOUND')
                 
-            logger.info(f"✓ Service account JSON is valid")
-            logger.info(f"  Client Email: {client_email}")
-            logger.info(f"  Project ID: {project_id}")
+            logger.info(f"Service account JSON is valid")
+            logger.info(f"Client Email: {client_email}")
+            logger.info(f"Project ID: {project_id}")
             
             if client_email == 'NOT FOUND':
-                error_msg = "❌ 'client_email' not found in service account JSON"
+                error_msg = "'client_email' not found in service account JSON"
                 logger.error(error_msg)
                 return False, error_msg
                 
         except json.JSONDecodeError as e:
-            error_msg = f"❌ Invalid JSON in service account file: {e}"
+            error_msg = f"Invalid JSON in service account file: {e}"
             logger.error(error_msg)
             return False, error_msg
         except Exception as e:
-            error_msg = f"❌ Error reading service account file: {e}"
+            error_msg = f"Error reading service account file: {e}"
             logger.error(error_msg)
             return False, error_msg
         
         # Step 3: Try to authenticate
         try:
-            logger.info("\n🔐 Attempting to authenticate with Google Sheets API...")
+            logger.info("\nAttempting to authenticate with Google Sheets API...")
             
             scope = [
                 "https://www.googleapis.com/auth/spreadsheets",
@@ -129,7 +111,7 @@ class GoogleSheetsWriter:
             logger.info("✓ Successfully created Google Sheets client")
             
         except Exception as e:
-            error_msg = f"❌ Failed to create Google Sheets client: {e}"
+            error_msg = f"Failed to create Google Sheets client: {e}"
             logger.error(error_msg)
             logger.error("\nPossible solutions:")
             logger.error("1. Check if the service account JSON file is valid")
@@ -139,7 +121,7 @@ class GoogleSheetsWriter:
         
         # Step 4: Try to access the specific spreadsheet
         try:
-            logger.info(f"\n📊 Attempting to access spreadsheet: {self.sheet_id}")
+            logger.info(f"\nAttempting to access spreadsheet: {self.sheet_id}")
             
             self.spreadsheet = self.client.open_by_key(self.sheet_id)
             
@@ -148,10 +130,10 @@ class GoogleSheetsWriter:
             logger.info(f"  URL: https://docs.google.com/spreadsheets/d/{self.sheet_id}")
             
         except gspread.exceptions.SpreadsheetNotFound:
-            error_msg = f"❌ Spreadsheet not found or no access: {self.sheet_id}"
+            error_msg = f"Spreadsheet not found or no access: {self.sheet_id}"
             logger.error(error_msg)
-            logger.error("\n❗ COMMON ISSUE - Sheet not shared with service account")
-            logger.error("\nTo fix this:")
+            logger.error("\nCOMMON ISSUE - Sheet not shared with service account")
+            logger.error("\n To fix this:")
             logger.error(f"1. Open sheet: https://docs.google.com/spreadsheets/d/{self.sheet_id}")
             logger.error(f"2. Click 'Share'")
             logger.error(f"3. Add: {client_email}")
@@ -159,12 +141,12 @@ class GoogleSheetsWriter:
             return False, error_msg
             
         except gspread.exceptions.APIError as e:
-            error_msg = f"❌ Google Sheets API error: {e}"
+            error_msg = f" Google Sheets API error: {e}"
             logger.error(error_msg)
             return False, error_msg
             
         except Exception as e:
-            error_msg = f"❌ Unexpected error accessing spreadsheet: {e}"
+            error_msg = f" Unexpected error accessing spreadsheet: {e}"
             logger.error(error_msg)
             return False, error_msg
         
@@ -178,7 +160,7 @@ class GoogleSheetsWriter:
                 logger.info(f"  - {ws.title}")
                 
         except Exception as e:
-            error_msg = f"❌ Failed to retrieve worksheets: {e}"
+            error_msg = f" Failed to retrieve worksheets: {e}"
             logger.error(error_msg)
             return False, error_msg
         
@@ -199,7 +181,7 @@ class GoogleSheetsWriter:
             logger.info(f"✓ Test worksheet deleted")
             
         except Exception as e:
-            error_msg = f"❌ Write test failed: {e}"
+            error_msg = f" Write test failed: {e}"
             logger.error(error_msg)
             return False, error_msg
         
@@ -282,9 +264,10 @@ class GoogleSheetsWriter:
         logger.info(f"  Retention: Latest {retention} candles per symbol")
         
         # Keep latest 3 candles per symbol
-        df_prepared = df.groupby('trading_symbol').apply(
-            lambda x: x.nlargest(retention, 'timestamp')
-        ).reset_index(drop=True)
+        df_prepared = df.sort_values(['trading_symbol', 'timeframe']).groupby('trading_symbol').tail(retention).reset_index(drop=True)
+        # df_prepared = df.groupby('trading_symbol').apply(
+        #     lambda x: x.nlargest(retention, 'timestamp')
+        # ).reset_index(drop=True)
         
         df_prepared = df_prepared.sort_values(['trading_symbol', 'timestamp']).reset_index(drop=True)
         
@@ -376,12 +359,9 @@ class GoogleSheetsWriter:
             logger.info(f"Writing {len(df)} rows to {worksheet.title}...")
             
             df.fillna('None', inplace=True)
-            # df.to_csv('write_worksheet_title.csv', index=False)
 
-            # HEADER + ROWS
             data = [df.columns.tolist()] + df.values.tolist()
 
-            # ✅ ✅ NEW: Ensure row/col capacity BEFORE writing
             self._ensure_capacity(
                 worksheet,
                 rows_needed=len(data) + 5,

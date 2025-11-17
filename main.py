@@ -71,7 +71,7 @@ class UpstoxSupertrendPipeline:
         
         # Check if Google Sheet ID is configured
         if GOOGLE_SHEET_ID == "your_google_sheet_id_here":
-            logger.error("❌ Google Sheet ID not configured!")
+            logger.error(" Google Sheet ID not configured!")
             logger.error("Please update GOOGLE_SHEET_ID in config/credentials.py")
             logger.error("\nHow to get your Google Sheet ID:")
             logger.error("1. Open your Google Sheet")
@@ -81,7 +81,7 @@ class UpstoxSupertrendPipeline:
         
         # Check if service account file is configured
         if SERVICE_ACCOUNT_FILE == "path/to/service_account.json":
-            logger.error("❌ Service account file path not configured!")
+            logger.error(" Service account file path not configured!")
             logger.error("Please update SERVICE_ACCOUNT_FILE in config/credentials.py")
             logger.error("\nHow to get a service account:")
             logger.error("1. Go to Google Cloud Console")
@@ -102,7 +102,7 @@ class UpstoxSupertrendPipeline:
         
         if not success:
             logger.error("\n" + "=" * 60)
-            logger.error("❌ GOOGLE SHEETS ACCESS FAILED")
+            logger.error(" GOOGLE SHEETS ACCESS FAILED")
             logger.error("=" * 60)
             logger.error("Cannot proceed with pipeline until Google Sheets access is working.")
             logger.error("Please fix the issues above and try again.")
@@ -174,20 +174,15 @@ class UpstoxSupertrendPipeline:
             logger.error("✗ Failed to fetch instruments")
             return False
         
-        # Create mapping
         self.instruments_dict = mapper.create_mapping()
         
         if not self.instruments_dict:
             logger.error("✗ Failed to create instrument mapping")
             return False
         
-        # Display statistics
         mapper.get_statistics()
         
-        # Optionally save to CSV for reference
-        mapper.save_mapping_to_csv('instrument_mapping.csv')
-        
-        logger.info(f"✓ Successfully mapped {len(self.instruments_dict)} instruments")
+        logger.info(f"Successfully mapped {len(self.instruments_dict)} instruments")
         
         return True
     

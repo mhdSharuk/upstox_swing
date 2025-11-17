@@ -1,22 +1,11 @@
-"""
-Percentage Calculator - Calculate percentage differences between HL2 and Supertrend values
-New Step 5.5: Calculate percentage differences and merge with symbol info CSV
-"""
-
 import pandas as pd
-import os
 from typing import Dict, List
 from utils.logger import get_logger, ProgressLogger
 
 logger = get_logger(__name__)
 
-
 class PercentageCalculator:
-    """
-    Calculate percentage differences between HL2 and Supertrend values
-    Formula: ((HL2 - Supertrend) / HL2) * 100
-    """
-    
+
     def __init__(self, symbol_info_csv: str = 'symbol_info.csv'):
         """
         Initialize Percentage Calculator
@@ -34,12 +23,20 @@ class PercentageCalculator:
         Returns:
             bool: True if loaded successfully
         """
-        if not os.path.exists(self.symbol_info_csv):
-            logger.error(f"Symbol info CSV not found: {self.symbol_info_csv}")
-            return False
         
         try:
-            self.symbol_info_df = pd.read_csv(self.symbol_info_csv)
+            url = "https://docs.google.com/spreadsheets/d/1meVDXRT2eGBdmc1kRmtWiUd7iP-Ik1sxQHC_O4rz8K8/gviz/tq?tqx=out:csv&gid=1767398927"
+
+            self.symbol_info_df = pd.read_csv(url)
+            self.symbol_info_df = self.symbol_info_df[['Symbol', 'Sector', 'Industry', 'MCap Cr']]
+            self.symbol_info_df['MCap Cr'] = self.symbol_info_df['MCap Cr'].apply(lambda x: float(x.replace(',', '')))
+            self.symbol_info_df.columns = [x.strip().lower() for x in self.symbol_info_df.columns]
+            self.symbol_info_df.rename(columns={
+                'symbol' : 'trading_symbol',
+                'sector': 'sector',
+                'industry': 'industry',
+                'mcap cr': 'market_cap'
+            }, inplace=True)
             
             # Validate required columns
             required_cols = ['trading_symbol', 'sector', 'industry', 'market_cap']
