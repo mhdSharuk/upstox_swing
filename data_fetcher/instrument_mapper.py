@@ -106,7 +106,7 @@ class InstrumentMapper:
         df_unique = self.instruments_df.sort_values(by=['trading_symbol']).drop_duplicates(
             'trading_symbol',
             keep='last'
-        )#.tail(50)
+        )#.tail(500)
         
         # Create the mapping dictionary
         self.instruments_dict = dict(zip(df_unique['trading_symbol'], df_unique['instrument_key']))
