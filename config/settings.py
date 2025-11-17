@@ -1,6 +1,6 @@
 """
 Configuration settings for Upstox Supertrend Project
-UPDATED: Uses credentials/ and logs/ folders
+UPDATED: Added market status endpoint and intraday endpoint
 """
 
 # ==================== UPSTOX API CONFIGURATION ====================
@@ -8,6 +8,8 @@ API_CONFIG = {
     'token_file': 'credentials/upstox_token.json',
     'base_url': 'https://api.upstox.com',
     'historical_endpoint': '/v3/historical-candle',
+    'intraday_endpoint': '/v3/historical-candle/intraday',
+    'market_status_endpoint': '/v2/market/status',
     'instruments_url': 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz',
     'rate_limit_delay': 0.1,  # Delay between API calls in seconds
     'max_retries': 3,
