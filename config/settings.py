@@ -1,10 +1,11 @@
 """
 Configuration settings for Upstox Supertrend Project
+UPDATED: Uses credentials/ and logs/ folders
 """
 
 # ==================== UPSTOX API CONFIGURATION ====================
 API_CONFIG = {
-    'token_file': 'upstox_token.json',
+    'token_file': 'credentials/upstox_token.json',
     'base_url': 'https://api.upstox.com',
     'historical_endpoint': '/v3/historical-candle',
     'instruments_url': 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz',
@@ -93,7 +94,7 @@ FLAT_BASE_MIN_COUNT = 3      # Minimum consecutive candles to count as flat base
 # ==================== GOOGLE SHEETS CONFIGURATION ====================
 SHEETS_CONFIG = {
     'sheet_id': '1c2D3KERJJSJIDRO6hzVVsiasAN3uXyypESMkThxWVZo',  # To be set by user
-    'service_account_file': 'service_account.json',
+    'service_account_file': 'credentials/service_account.json',
     'sheet_names': {
         '125min': '125min_data',
         'daily': 'daily_data'
@@ -120,7 +121,7 @@ ASYNC_CONFIG = {
 LOGGING_CONFIG = {
     'level': 'INFO',
     'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    'file': 'upstox_supertrend.log',
+    'file': 'logs/upstox_supertrend.log',
     'console': True
 }
 
@@ -135,4 +136,10 @@ STATE_VARIABLES_TEMPLATE = {
     'atr_components': [],  # For ATR calculation rolling window
     'sma_sum': None,       # For SMA calculation
     'sma_count': None      # For SMA calculation
+}
+
+# ==================== SYMBOL INFO CSV ====================
+SYMBOL_INFO_CONFIG = {
+    'url': 'https://docs.google.com/spreadsheets/d/1meVDXRT2eGBdmc1kRmtWiUd7iP-Ik1sxQHC_O4rz8K8/gviz/tq?tqx=out:csv&gid=1767398927',
+    'required_columns': ['trading_symbol', 'sector', 'industry', 'market_cap']
 }

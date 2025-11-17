@@ -2,6 +2,7 @@
 Environment Variable Loader
 Loads credentials from .env file or environment variables
 Falls back to credentials.py if env vars not available
+UPDATED: Uses credentials/ folder for sensitive files
 """
 
 import os
@@ -15,7 +16,6 @@ PROJECT_ROOT = Path(__file__).parent.parent
 env_file = PROJECT_ROOT / '.env'
 if env_file.exists():
     load_dotenv(env_file)
-    # print(f"✓ Loaded environment variables from {env_file}")
 else:
     print(f"⚠ No .env file found at {env_file}, using system environment variables")
 
@@ -34,7 +34,7 @@ FLASK_BASE_URL = os.getenv('FLASK_BASE_URL', 'https://mhdsharuk.pythonanywhere.c
 
 # ==================== GOOGLE SHEETS CREDENTIALS ====================
 GOOGLE_SHEET_ID = os.getenv('GOOGLE_SHEET_ID')
-SERVICE_ACCOUNT_FILE = os.getenv('SERVICE_ACCOUNT_FILE', 'service_account.json')
+SERVICE_ACCOUNT_FILE = os.getenv('SERVICE_ACCOUNT_FILE', 'credentials/service_account.json')
 
 # ==================== VALIDATION ====================
 def validate_credentials():
@@ -99,10 +99,6 @@ if not is_valid:
         print("  1. Create .env file with required variables")
         print("  2. Set environment variables in your system")
         print("  3. Create config/credentials.py")
-else:
-    pass
-    # print("✓ All required credentials loaded from environment variables")
-
 
 # ==================== EXPORT ALL ====================
 __all__ = [

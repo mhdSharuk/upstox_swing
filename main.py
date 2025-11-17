@@ -1,7 +1,7 @@
 """
 Main Orchestration Script for Upstox Supertrend Project
 Ties all components together to fetch data, calculate indicators, and save to Google Sheets
-UPDATED: Added Step 5.5 for percentage calculations and symbol info CSV merge
+UPDATED: Refactored with separated percentage calculation and symbol info merge steps
 """
 
 import sys
@@ -32,7 +32,8 @@ from data_fetcher.instrument_mapper import InstrumentMapper
 from data_fetcher.historical_data import HistoricalDataFetcher
 from indicators.supertrend_numba import SupertrendCalculator
 from indicators.flat_base_numba import FlatBaseDetector
-from indicators.percentage_calculator import PercentageCalculator  # NEW
+from indicators.percentage_calculator import PercentageCalculator
+from indicators.symbol_info_merger import SymbolInfoMerger
 from storage.sheets_writer import GoogleSheetsWriter
 from utils.logger import setup_logging, get_logger
 
@@ -54,7 +55,8 @@ class UpstoxSupertrendPipeline:
         self.historical_data = {}
         self.calculated_data = {}
         self.state_variables = {}
-        self.processed_data = {}  # NEW: For data after percentage calculations and CSV merge
+        self.with_percentages = {}  # Data after percentage calculations
+        self.final_data = {}  # Final data with symbol info merged
         self.sheets_writer = None
     
     def step0_test_google_sheets(self) -> bool:
@@ -71,24 +73,24 @@ class UpstoxSupertrendPipeline:
         
         # Check if Google Sheet ID is configured
         if GOOGLE_SHEET_ID == "your_google_sheet_id_here":
-            logger.error(" Google Sheet ID not configured!")
-            logger.error("Please update GOOGLE_SHEET_ID in config/credentials.py")
+            logger.error("✗ Google Sheet ID not configured!")
+            logger.error("Please update GOOGLE_SHEET_ID in config/credentials.py or .env")
             logger.error("\nHow to get your Google Sheet ID:")
             logger.error("1. Open your Google Sheet")
             logger.error("2. Look at the URL: https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit")
             logger.error("3. Copy the YOUR_SHEET_ID part")
             return False
         
-        # Check if service account file is configured
-        if SERVICE_ACCOUNT_FILE == "path/to/service_account.json":
-            logger.error(" Service account file path not configured!")
-            logger.error("Please update SERVICE_ACCOUNT_FILE in config/credentials.py")
+        # Check if service account file exists
+        if not os.path.exists(SERVICE_ACCOUNT_FILE):
+            logger.error(f"✗ Service account file not found: {SERVICE_ACCOUNT_FILE}")
             logger.error("\nHow to get a service account:")
             logger.error("1. Go to Google Cloud Console")
             logger.error("2. Create a project or select existing one")
             logger.error("3. Enable Google Sheets API and Google Drive API")
             logger.error("4. Create a service account")
             logger.error("5. Download the JSON key file")
+            logger.error(f"6. Save it as '{SERVICE_ACCOUNT_FILE}'")
             return False
         
         # Initialize Google Sheets Writer
@@ -102,7 +104,7 @@ class UpstoxSupertrendPipeline:
         
         if not success:
             logger.error("\n" + "=" * 60)
-            logger.error(" GOOGLE SHEETS ACCESS FAILED")
+            logger.error("✗ GOOGLE SHEETS ACCESS FAILED")
             logger.error("=" * 60)
             logger.error("Cannot proceed with pipeline until Google Sheets access is working.")
             logger.error("Please fix the issues above and try again.")
@@ -287,25 +289,19 @@ class UpstoxSupertrendPipeline:
         
         return True
     
-    def step5_5_calculate_percentages_and_merge_csv(self) -> bool:
+    def step6_calculate_percentages(self) -> bool:
         """
-        NEW Step 5.5: Calculate percentage differences and merge with symbol info CSV
-        
-        Calculates:
-        1. pct_diff_avg3_ST_X: % diff between avg(last 3 HL2) and supertrend
-        2. pct_diff_latest_ST_X: % diff between latest HL2 and supertrend
-        
-        Then merges with symbol_info.csv to add sector, industry, market_cap
+        Step 6: Calculate percentage differences (REFACTORED - calculations only)
         
         Returns:
             bool: True if successful
         """
         logger.info("\n" + "=" * 60)
-        logger.info("STEP 5.5: CALCULATE PERCENTAGES & MERGE SYMBOL INFO CSV")
+        logger.info("STEP 6: CALCULATE PERCENTAGE DIFFERENCES")
         logger.info("=" * 60)
         
         # Initialize percentage calculator
-        pct_calculator = PercentageCalculator(symbol_info_csv='symbol_info.csv')
+        pct_calculator = PercentageCalculator()
         
         # Prepare configs dict
         configs_dict = {
@@ -313,34 +309,62 @@ class UpstoxSupertrendPipeline:
             'daily': SUPERTREND_CONFIGS_DAILY
         }
         
-        # Process all timeframes with percentage calculations and CSV merge
-        self.processed_data = pct_calculator.process_all_timeframes(
+        # Process all timeframes with percentage calculations
+        self.with_percentages = pct_calculator.process_all_timeframes(
             self.calculated_data,
             configs_dict
         )
         
-        if not self.processed_data:
-            logger.error("✗ Failed to process percentage calculations and CSV merge")
+        if not self.with_percentages:
+            logger.error("✗ Failed to calculate percentages")
             return False
         
         # Display statistics for each timeframe
-        for timeframe, df in self.processed_data.items():
+        for timeframe, df in self.with_percentages.items():
             pct_calculator.get_statistics(df, timeframe)
         
-        logger.info("✓ Percentage calculations and CSV merge complete")
+        logger.info("✓ Percentage calculations complete")
         
         return True
     
-    def step6_save_to_google_sheets(self) -> bool:
+    def step7_merge_symbol_info(self) -> bool:
         """
-        Step 6: Save calculated data to Google Sheets
-        UPDATED: Now uses processed_data (with percentages and symbol info) instead of calculated_data
+        Step 7: Merge with symbol info CSV (REFACTORED - new separate step)
         
         Returns:
             bool: True if successful
         """
         logger.info("\n" + "=" * 60)
-        logger.info("STEP 6: SAVE TO GOOGLE SHEETS")
+        logger.info("STEP 7: MERGE WITH SYMBOL INFO")
+        logger.info("=" * 60)
+        
+        # Initialize symbol info merger
+        symbol_merger = SymbolInfoMerger()
+        
+        # Merge all timeframes (loads CSV once and reuses)
+        self.final_data = symbol_merger.merge_all_timeframes(self.with_percentages)
+        
+        if not self.final_data:
+            logger.error("✗ Failed to merge symbol info")
+            return False
+        
+        # Display statistics for each timeframe
+        for timeframe, df in self.final_data.items():
+            symbol_merger.get_statistics(df, timeframe)
+        
+        logger.info("✓ Symbol info merge complete")
+        
+        return True
+    
+    def step8_save_to_google_sheets(self) -> bool:
+        """
+        Step 8: Save final data to Google Sheets
+        
+        Returns:
+            bool: True if successful
+        """
+        logger.info("\n" + "=" * 60)
+        logger.info("STEP 8: SAVE TO GOOGLE SHEETS")
         logger.info("=" * 60)
         
         if not self.sheets_writer:
@@ -354,8 +378,8 @@ class UpstoxSupertrendPipeline:
                 logger.error("✗ Failed to authenticate with Google Sheets")
                 return False
         
-        # Use processed_data (which has percentages and symbol info) instead of calculated_data
-        data_to_write = self.processed_data
+        # Use final_data (which has percentages and symbol info)
+        data_to_write = self.final_data
         
         # Prepare configs dict
         configs_dict = {
@@ -389,7 +413,7 @@ class UpstoxSupertrendPipeline:
         logger.info("=" * 60)
         
         try:
-            # Step 0: Test Google Sheets access FIRST (before wasting time on data processing)
+            # Step 0: Test Google Sheets access FIRST
             if not self.step0_test_google_sheets():
                 logger.error("Pipeline failed at Step 0: Google Sheets Access Test")
                 logger.error("\n⚠️  CRITICAL: Fix Google Sheets access before running the pipeline again!")
@@ -420,14 +444,19 @@ class UpstoxSupertrendPipeline:
                 logger.error("Pipeline failed at Step 5: Detect Flat Bases")
                 return False
             
-            # NEW Step 5.5: Calculate percentages and merge with symbol info CSV
-            if not self.step5_5_calculate_percentages_and_merge_csv():
-                logger.error("Pipeline failed at Step 5.5: Calculate Percentages & Merge CSV")
+            # Step 6: Calculate percentages (REFACTORED)
+            if not self.step6_calculate_percentages():
+                logger.error("Pipeline failed at Step 6: Calculate Percentages")
                 return False
             
-            # Step 6: Save to Google Sheets
-            if not self.step6_save_to_google_sheets():
-                logger.error("Pipeline failed at Step 6: Save to Google Sheets")
+            # Step 7: Merge with symbol info (NEW STEP)
+            if not self.step7_merge_symbol_info():
+                logger.error("Pipeline failed at Step 7: Merge Symbol Info")
+                return False
+            
+            # Step 8: Save to Google Sheets
+            if not self.step8_save_to_google_sheets():
+                logger.error("Pipeline failed at Step 8: Save to Google Sheets")
                 return False
             
             # Success!

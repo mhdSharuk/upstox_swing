@@ -1,6 +1,7 @@
 """
 Flat Base Detector - Detect flat base patterns in supertrend values
 Optimized with vectorized NumPy/Pandas operations
+UPDATED: Progress logging shows percentages instead of every 10 symbols
 """
 
 import pandas as pd
@@ -223,6 +224,7 @@ class FlatBaseDetector:
             # Collect results as they complete
             completed = 0
             total = len(future_to_symbol)
+            last_percentage = -1
             
             for future in as_completed(future_to_symbol):
                 symbol = future_to_symbol[future]
@@ -232,8 +234,12 @@ class FlatBaseDetector:
                         updated_dfs[result_symbol] = df_with_fb
                     
                     completed += 1
-                    if completed % 10 == 0 or completed == total:
-                        logger.info(f"Progress: {completed}/{total} symbols processed")
+                    
+                    # Log every 10% or at completion
+                    percentage = int((completed / total) * 100)
+                    if percentage >= last_percentage + 10 or completed == total:
+                        logger.info(f"Progress: {completed}/{total} ({percentage}%)")
+                        last_percentage = percentage
                         
                 except Exception as e:
                     logger.error(f"{symbol}: Exception during processing - {str(e)}")

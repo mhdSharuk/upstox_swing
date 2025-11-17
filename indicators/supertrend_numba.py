@@ -1,6 +1,7 @@
 """
 Supertrend Calculator - FIXED to match Pine Script exactly
 Optimized with Numba for high performance
+UPDATED: Progress logging shows percentages instead of counts
 """
 
 import pandas as pd
@@ -468,14 +469,10 @@ class SupertrendCalculator:
                 }
                 
                 # Collect results with progress tracking
-                progress = ProgressLogger(
-                    len(future_to_symbol),
-                    f"Calculating {timeframe} supertrends (parallel)",
-                    logger
-                )
-                
                 completed = 0
                 failed = 0
+                total = len(future_to_symbol)
+                last_percentage = -1
                 
                 for future in as_completed(future_to_symbol):
                     symbol = future_to_symbol[future]
@@ -494,9 +491,14 @@ class SupertrendCalculator:
                         failed += 1
                         logger.error(f"{symbol}: Calculation failed - {e}")
                     
-                    progress.update()
+                    # Update progress - show percentage every 10%
+                    total_processed = completed + failed
+                    percentage = int((total_processed / total) * 100)
+                    if percentage >= last_percentage + 10 or total_processed == total:
+                        logger.info(f"Progress: {total_processed}/{total} ({percentage}%)")
+                        last_percentage = percentage
                 
-                progress.complete(f"Success: {completed}, Failed: {failed}, Total: {len(future_to_symbol)}")
+                logger.info(f"Calculation complete: Success: {completed}, Failed: {failed}, Total: {total}")
         
         except Exception as e:
             logger.error(f"Parallel processing failed: {e}")

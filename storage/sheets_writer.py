@@ -264,7 +264,7 @@ class GoogleSheetsWriter:
         logger.info(f"  Retention: Latest {retention} candles per symbol")
         
         # Keep latest 3 candles per symbol
-        df_prepared = df.sort_values(['trading_symbol', 'timeframe']).groupby('trading_symbol').tail(retention).reset_index(drop=True)
+        df_prepared = df.sort_values(['trading_symbol', 'timestamp']).groupby('trading_symbol').tail(retention).reset_index(drop=True)
         # df_prepared = df.groupby('trading_symbol').apply(
         #     lambda x: x.nlargest(retention, 'timestamp')
         # ).reset_index(drop=True)
