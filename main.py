@@ -380,6 +380,7 @@ class UpstoxSupertrendPipeline:
         
         # Use final_data (which has percentages and symbol info)
         data_to_write = self.final_data
+        logger.info(f"Latest Data : {type(self.final_data)}")
         
         # Prepare configs dict
         configs_dict = {
