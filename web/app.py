@@ -1,6 +1,6 @@
 """
 Signal Tracker - Streamlit Application
-MASSIVE TABLE FONTS for easy reading
+Using st.data_editor with checkbox column for watchlist management and LARGE FONTS
 """
 
 import streamlit as st
@@ -22,16 +22,14 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# CSS with MASSIVE TABLE FONTS
+# CSS for UI elements
 st.markdown("""
 <style>
-    /* Reduce padding */
     .block-container {
         padding-top: 2rem;
         padding-bottom: 2rem;
     }
     
-    /* EXTRA LARGE HEADERS */
     h1 {
         font-size: 48px !important;
         font-weight: 600 !important;
@@ -50,20 +48,17 @@ st.markdown("""
         margin-bottom: 1rem !important;
     }
     
-    /* EXTRA LARGE LABELS */
     label {
         font-size: 20px !important;
         font-weight: 600 !important;
     }
     
-    /* EXTRA LARGE INPUT TEXT */
     input, select, textarea {
         font-size: 20px !important;
         padding: 12px !important;
         height: 50px !important;
     }
     
-    /* EXTRA LARGE BUTTON TEXT */
     .stButton button {
         font-size: 20px !important;
         font-weight: 600 !important;
@@ -71,108 +66,66 @@ st.markdown("""
         height: 55px !important;
     }
     
-    /* ===== MASSIVE TABLE FONTS ===== */
-    .dataframe td {
-        text-align: center !important;
-        font-size: 28px !important;
-        padding: 20px 16px !important;
-        font-weight: 600 !important;
-        line-height: 1.5 !important;
-    }
-    
-    .dataframe th {
-        text-align: center !important;
-        font-size: 24px !important;
-        font-weight: 700 !important;
-        padding: 20px 16px !important;
-        line-height: 1.5 !important;
-    }
-    
-    /* Make ALL table text visible */
-    table, tbody, thead, tr, td, th {
-        font-size: 28px !important;
-    }
-    
-    /* Target data editor cells specifically */
-    [data-testid="stDataFrame"] td {
-        font-size: 28px !important;
-    }
-    
-    [data-testid="stDataFrame"] th {
-        font-size: 24px !important;
-    }
-    
-    /* Force cell content to be large */
-    .dataframe td > div,
-    .dataframe th > div,
-    [data-testid="stDataFrame"] td > div,
-    [data-testid="stDataFrame"] th > div {
-        font-size: 28px !important;
-    }
-    
-    /* Narrow checkbox column */
-    .dataframe td:first-child,
-    .dataframe th:first-child {
-        max-width: 70px !important;
-        width: 70px !important;
-    }
-    
-    /* EXTRA LARGE CHECKBOX */
-    input[type="checkbox"] {
-        width: 28px !important;
-        height: 28px !important;
-        cursor: pointer !important;
-    }
-    
-    /* EXTRA LARGE GENERAL TEXT */
     .stMarkdown, .stText, p, div {
         font-size: 20px !important;
     }
     
-    /* EXTRA LARGE CAPTIONS */
     .stCaptionContainer, .stCaption {
         font-size: 18px !important;
     }
     
-    /* EXTRA LARGE TAB TEXT */
     .stTabs [data-baseweb="tab"] {
         font-size: 22px !important;
         font-weight: 600 !important;
         padding: 16px 32px !important;
     }
     
-    /* EXTRA LARGE TOAST NOTIFICATIONS */
     .stToast {
         font-size: 20px !important;
     }
     
-    /* EXTRA LARGE NUMBER INPUTS */
     .stNumberInput input {
         font-size: 20px !important;
     }
     
-    /* EXTRA LARGE SELECT BOXES */
     .stSelectbox select {
         font-size: 20px !important;
     }
     
-    /* EXTRA LARGE DROPDOWN OPTIONS */
     [role="option"] {
         font-size: 20px !important;
         padding: 12px !important;
     }
     
-    /* EXTRA LARGE INFO/WARNING MESSAGES */
     .stAlert {
         font-size: 20px !important;
     }
     
-    /* EXTRA LARGE SPINNER TEXT */
     .stSpinner > div {
         font-size: 20px !important;
     }
     
-    /* Hide Streamlit branding */
+    /* Larger fonts for data_editor tables */
+    .stDataFrame, [data-testid="stDataFrame"] {
+        font-size: 20px !important;
+    }
+    
+    [data-testid="stDataFrame"] table {
+        font-size: 20px !important;
+    }
+    
+    [data-testid="stDataFrame"] th {
+        font-size: 22px !important;
+        font-weight: 700 !important;
+        padding: 12px !important;
+    }
+    
+    [data-testid="stDataFrame"] td {
+        font-size: 20px !important;
+        font-weight: 600 !important;
+        padding: 10px !important;
+    }
+    
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
@@ -312,7 +265,7 @@ def render_filters(prefix, df):
 
 
 def render_signal_table_with_watchlist(df, signal_type, sheet_name, supertrend):
-    """Render signal table with watchlist checkboxes"""
+    """Render signal table with checkboxes for watchlist management and LARGE FONTS"""
     if df.empty:
         st.info(f"No {signal_type.lower()} signals found")
         return
@@ -320,75 +273,104 @@ def render_signal_table_with_watchlist(df, signal_type, sheet_name, supertrend):
     # Load watchlist data
     watchlist_data = data_handler.fetch_watchlist_data()
     
-    # Create a copy for display with checkbox column
-    display_df = df.copy()
+    # Get symbols currently in watchlist for this signal type
+    watchlist_symbols = [
+        item['symbol'] for item in watchlist_data
+        if item['sheet'] == sheet_name and 
+           item['supertrend'] == supertrend and 
+           item['type'] == signal_type
+    ]
     
-    # Convert pandas types to native Python types
-    display_df['Close'] = display_df['Close'].astype(float)
-    display_df['LTP %'] = display_df['LTP %'].astype(float)
-    display_df['Pct Diff'] = display_df['Pct Diff'].astype(float)
-    display_df['Flatbase'] = display_df['Flatbase'].astype(int)
+    # Prepare display dataframe with watchlist checkbox column
+    display_df = df[['Symbol', 'Close', 'LTP %', 'Pct Diff', 'Flatbase']].copy()
     
-    # Add checkbox state based on watchlist
-    display_df.insert(0, 'Add', False)
+    # Add watchlist column - True if symbol is in watchlist
+    display_df.insert(0, '📌', display_df['Symbol'].isin(watchlist_symbols))
     
-    for idx, row in display_df.iterrows():
-        symbol = row['Symbol']
-        is_checked = watchlist_manager.is_in_watchlist(
-            symbol, sheet_name, supertrend, signal_type, watchlist_data
-        )
-        display_df.at[idx, 'Add'] = is_checked
+    # Store original state for comparison
+    original_state = display_df['📌'].copy()
     
-    # Configure column display
+    # Configure column types for data_editor
     column_config = {
-        "Add": st.column_config.CheckboxColumn(
-            "Add",
-            help="Add to watchlist",
+        '📌': st.column_config.CheckboxColumn(
+            '📌',
+            help="Add/Remove from watchlist",
             default=False,
             width="small"
         ),
-        "Symbol": st.column_config.TextColumn("Symbol", width="medium"),
-        "Close": st.column_config.NumberColumn("Close", format="%.2f", width="small"),
-        "LTP %": st.column_config.NumberColumn("LTP %", format="%.2f", width="small"),
-        "Pct Diff": st.column_config.NumberColumn("Pct Diff", format="%.2f", width="small"),
-        "Flatbase": st.column_config.NumberColumn("Flatbase", format="%d", width="small"),
+        'Symbol': st.column_config.TextColumn(
+            'Symbol',
+            width="medium"
+        ),
+        'Close': st.column_config.NumberColumn(
+            'Close',
+            format="%.2f",
+            width="medium"
+        ),
+        'LTP %': st.column_config.NumberColumn(
+            'LTP %',
+            format="%.2f",
+            width="medium"
+        ),
+        'Pct Diff': st.column_config.NumberColumn(
+            'Pct Diff',
+            format="%.2f",
+            width="medium"
+        ),
+        'Flatbase': st.column_config.NumberColumn(
+            'Flatbase',
+            format="%d",
+            width="medium"
+        )
     }
     
-    # Display editable dataframe
+    # Display editable dataframe with LARGE FONTS using CSS
+    # Note: st.data_editor doesn't support pandas Styler, so we rely on CSS
     edited_df = st.data_editor(
-        display_df[['Add', 'Symbol', 'Close', 'LTP %', 'Pct Diff', 'Flatbase']],
-        column_config=column_config,
-        hide_index=True,
+        display_df,
         use_container_width=True,
-        key=f"{sheet_name}_{signal_type}_{supertrend}_table"
+        hide_index=True,
+        column_config=column_config,
+        disabled=['Symbol', 'Close', 'LTP %', 'Pct Diff', 'Flatbase'],
+        key=f"{sheet_name}_{signal_type}_{supertrend}_df"
     )
     
     # Detect changes and update watchlist
+    changes_made = False
+    added_count = 0
+    removed_count = 0
+    
     for idx in range(len(edited_df)):
-        original_checked = display_df.iloc[idx]['Add']
-        new_checked = edited_df.iloc[idx]['Add']
+        original_checked = original_state.iloc[idx]
+        current_checked = edited_df['📌'].iloc[idx]
         
-        if original_checked != new_checked:
-            symbol = edited_df.iloc[idx]['Symbol']
-            pct = float(display_df.iloc[idx]['Pct Diff'])
-            flatbase = int(display_df.iloc[idx]['Flatbase'])
+        if original_checked != current_checked:
+            symbol = edited_df['Symbol'].iloc[idx]
+            pct = float(edited_df['Pct Diff'].iloc[idx])
+            flatbase = int(edited_df['Flatbase'].iloc[idx])
             
-            if new_checked:
-                success = watchlist_manager.add_to_watchlist(
-                    symbol, sheet_name, supertrend, signal_type, pct, flatbase
-                )
-                if success:
-                    st.toast(f"✅ Added {symbol}", icon="✅")
-                    data_handler.clear_watchlist_cache_only()
-                    st.rerun()
-            else:
-                success = watchlist_manager.remove_from_watchlist(
-                    symbol, sheet_name, supertrend, signal_type
-                )
-                if success:
-                    st.toast(f"❌ Removed {symbol}", icon="❌")
-                    data_handler.clear_watchlist_cache_only()
-                    st.rerun()
+            if current_checked and not original_checked:
+                # Add to watchlist
+                if watchlist_manager.add_to_watchlist(symbol, sheet_name, supertrend, signal_type, pct, flatbase):
+                    added_count += 1
+                    changes_made = True
+            elif not current_checked and original_checked:
+                # Remove from watchlist
+                if watchlist_manager.remove_from_watchlist(symbol, sheet_name, supertrend, signal_type):
+                    removed_count += 1
+                    changes_made = True
+    
+    # Show status and trigger rerun if changes were made
+    if changes_made:
+        if added_count > 0:
+            st.toast(f"✅ Added {added_count} symbol(s) to watchlist", icon="✅")
+        if removed_count > 0:
+            st.toast(f"❌ Removed {removed_count} symbol(s) from watchlist", icon="❌")
+        data_handler.clear_watchlist_cache_only()
+        st.rerun()
+    
+    # Show watchlist count
+    st.caption(f"In watchlist: {len(watchlist_symbols)} symbols")
 
 
 def render_daily_signals():
@@ -483,35 +465,56 @@ def render_watchlist():
         return
     
     watchlist_df = watchlist_manager.get_watchlist_as_dataframe(watchlist_data)
-    watchlist_df.insert(0, 'Remove', False)
     
-    column_config = {
-        "Remove": st.column_config.CheckboxColumn("Remove", help="Remove from watchlist", default=False, width="small"),
-        "Symbol": st.column_config.TextColumn("Symbol", width="small"),
-        "Sheet": st.column_config.TextColumn("Sheet", width="medium"),
-        "Supertrend": st.column_config.TextColumn("Supertrend", width="medium"),
-        "Type": st.column_config.TextColumn("Type", width="small"),
-        "Pct Diff": st.column_config.TextColumn("Pct Diff", width="small"),
-        "Flatbase": st.column_config.TextColumn("Flatbase", width="small"),
-        "Date Added": st.column_config.TextColumn("Date Added", width="medium"),
-    }
+    # Apply pandas Styler for LARGE FONTS
+    styled_watchlist = watchlist_df.style.set_properties(
+        **{
+            'font-size': '24pt',
+            'text-align': 'center',
+            'font-weight': '600',
+            'padding': '12px'
+        }
+    ).set_table_styles([
+        {
+            'selector': 'th',
+            'props': [
+                ('font-size', '22pt'),
+                ('text-align', 'center'),
+                ('font-weight', '700'),
+                ('padding', '12px')
+            ]
+        }
+    ])
     
-    edited_watchlist = st.data_editor(
-        watchlist_df,
-        column_config=column_config,
-        hide_index=True,
+    # Display with row selection
+    event = st.dataframe(
+        styled_watchlist,
         use_container_width=True,
-        key="watchlist_table"
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="multi-row",
+        key="watchlist_df"
     )
     
-    for idx in range(len(edited_watchlist)):
-        if edited_watchlist.iloc[idx]['Remove']:
-            item = watchlist_data[idx]
-            success = watchlist_manager.remove_from_watchlist(
-                item['symbol'], item['sheet'], item['supertrend'], item['type']
-            )
-            if success:
-                st.toast(f"❌ Removed {item['symbol']}", icon="❌")
+    selected_rows = event.selection.rows if event.selection else []
+    
+    # Remove button
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.caption(f"Total: {len(watchlist_data)} | Selected: {len(selected_rows)}")
+    with col2:
+        if st.button("🗑️ Remove Selected", use_container_width=True):
+            removed_count = 0
+            for row_idx in selected_rows:
+                if row_idx < len(watchlist_data):
+                    item = watchlist_data[row_idx]
+                    if watchlist_manager.remove_from_watchlist(
+                        item['symbol'], item['sheet'], item['supertrend'], item['type']
+                    ):
+                        removed_count += 1
+            
+            if removed_count > 0:
+                st.toast(f"❌ Removed {removed_count} item(s)", icon="❌")
                 data_handler.clear_watchlist_cache_only()
                 st.rerun()
 
