@@ -7,7 +7,7 @@ API_CONFIG = {
     'token_file': 'upstox_token.json',
     'base_url': 'https://api.upstox.com',
     'historical_endpoint': '/v3/historical-candle',
-    'instruments_url': 'https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz',
+    'instruments_url': 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz',
     'rate_limit_delay': 0.1,  # Delay between API calls in seconds
     'max_retries': 3,
     'retry_delay': 2
@@ -82,8 +82,8 @@ SUPERTREND_CONFIGS_DAILY = [
 
 # ==================== DATA RETENTION SETTINGS ====================
 CANDLE_RETENTION = {
-    '125min': 1,  # Keep latest 200 candles per symbol
-    'daily': 1     # Keep latest 60 candles per symbol
+    '125min': 3,  # Keep latest 3 candles per symbol
+    'daily': 3     # Keep latest 3 candles per symbol
 }
 
 # ==================== FLAT BASE DETECTION ====================
@@ -104,7 +104,7 @@ SHEETS_CONFIG = {
 
 # ==================== INSTRUMENT FILTERING ====================
 INSTRUMENT_FILTERS = {
-    'instrument_types': ['A', 'B', 'T', 'Z', 'EQ'],  # Equity types
+    'instrument_types': ['EQ'],  # Equity types
     'key_pattern': 'INE',  # Must contain INE in instrument_key
     'exchange': 'NSE_EQ'  # Focus on NSE equity
 }
