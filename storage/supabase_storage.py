@@ -125,13 +125,14 @@ class SupabaseStorage:
     def prepare_parquet_data(self, df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """
         Prepare dataframe for parquet file (keep last 200 candles per symbol)
+        Also optimizes data types to reduce file size
         
         Args:
             df: DataFrame to prepare
             timeframe: Timeframe identifier
         
         Returns:
-            pd.DataFrame: Prepared dataframe
+            pd.DataFrame: Prepared and optimized dataframe
         """
         retention = PARQUET_RETENTION.get(timeframe, 200)
         
@@ -144,7 +145,71 @@ class SupabaseStorage:
         
         logger.info(f"  Rows after retention: {len(df_prepared)}")
         
+        # Optimize data types to reduce file size
+        original_size = df_prepared.memory_usage(deep=True).sum() / 1024  # KB
+        logger.info(f"  Original memory size: {original_size:.2f} KB")
+        
+        df_prepared = self._optimize_datatypes(df_prepared)
+        
+        optimized_size = df_prepared.memory_usage(deep=True).sum() / 1024  # KB
+        reduction = ((original_size - optimized_size) / original_size) * 100
+        logger.info(f"  Optimized memory size: {optimized_size:.2f} KB")
+        logger.info(f"  Size reduction: {reduction:.1f}%")
+        
         return df_prepared
+    
+    def _optimize_datatypes(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Optimize dataframe datatypes to reduce memory usage
+        - Round float columns to 2 decimal places and convert to float32
+        - Convert int64 to smaller int types based on value ranges
+        - Convert string columns to category for repeated values
+        
+        Args:
+            df: DataFrame to optimize
+        
+        Returns:
+            pd.DataFrame: Optimized dataframe
+        """
+        df_optimized = df.copy()
+        
+        for col in df_optimized.columns:
+            col_type = df_optimized[col].dtype
+            
+            # Optimize float columns
+            if col_type == 'float64':
+                # Round to 2 decimal places
+                df_optimized[col] = df_optimized[col].round(2)
+                
+                # Convert to float32 (float16 is too limited for price data)
+                # float32 provides sufficient precision for 2 decimals
+                df_optimized[col] = df_optimized[col].astype('float32')
+            
+            # Optimize integer columns
+            elif col_type == 'int64':
+                col_min = df_optimized[col].min()
+                col_max = df_optimized[col].max()
+                
+                # Choose smallest int type that fits the data
+                if col_min >= -128 and col_max <= 127:
+                    df_optimized[col] = df_optimized[col].astype('int8')
+                elif col_min >= -32768 and col_max <= 32767:
+                    df_optimized[col] = df_optimized[col].astype('int16')
+                elif col_min >= -2147483648 and col_max <= 2147483647:
+                    df_optimized[col] = df_optimized[col].astype('int32')
+            
+            # Optimize string/object columns
+            elif col_type == 'object':
+                # Convert to category if there are repeated values
+                # (Categories are efficient for columns with limited unique values)
+                num_unique = df_optimized[col].nunique()
+                num_total = len(df_optimized[col])
+                
+                # If less than 50% unique values, use category
+                if num_unique / num_total < 0.5:
+                    df_optimized[col] = df_optimized[col].astype('category')
+        
+        return df_optimized
     
     def upload_parquet(self, df: pd.DataFrame, timeframe: str) -> bool:
         """
