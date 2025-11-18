@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signal Tracker</title>
+  
+  <style>
+    :root {
+      --bg-primary: #f8f9fa;
+      --bg-secondary: white;
+      --bg-tertiary: #f1f3f4;
+      --text-primary: #202124;
+      --text-secondary: #5f6368;
+      --text-tertiary: #8b949e;
+      --border-primary: #dadce0;
+      --border-secondary: #f1f3f4;
+      --accent-blue: #1a73e8;
+      --accent-blue-hover: #1557b0;
+      --accent-green: #6aa84f;
+      --accent-green-hover: #5a9840;
+      --accent-red: #cc0000;
+      --positive: #0f9d58;
+      --negative: #d93025;
+      --disabled-bg: #dadce0;
+      --disabled-text: #5f6368;
+      --hover-bg: #f8f9fa;
+      --tab-hover-bg: #f1f3f4;
+      --spinner-border: #f1f3f4;
+      --cache-bg: #e8f5e9;
+      --cache-text: #1e8e3e;
+    }
+
+    [data-theme="dark"] {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #161b22;
+      --text-primary: #c9d1d9;
+      --text-secondary: #8b949e;
+      --text-tertiary: #8b949e;
+      --border-primary: #30363d;
+      --border-secondary: #21262d;
+      --accent-blue: #58a6ff;
+      --accent-blue-hover: #79b8ff;
+      --accent-green: #238636;
+      --accent-green-hover: #2ea043;
+      --accent-red: #da3633;
+      --positive: #3fb950;
+      --negative: #f85149;
+      --disabled-bg: #30363d;
+      --disabled-text: #6e7681;
+      --hover-bg: #0d1117;
+      --tab-hover-bg: #161b22;
+      --spinner-border: #21262d;
+      --cache-bg: #1a472a;
+      --cache-text: #3fb950;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: Roboto, Arial, sans-serif; 
+      font-size: 13px; 
+      background: var(--bg-primary); 
+      color: var(--text-primary); 
+      padding: 20px;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    
+    .header { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      margin-bottom: 20px; 
+    }
+    h1 { font-size: 24px; font-weight: 400; color: var(--accent-blue); }
+    
+    .theme-toggle { 
+      background: var(--bg-secondary); 
+      border: 1px solid var(--border-primary); 
+      padding: 8px 16px; 
+      border-radius: 20px; 
+      cursor: pointer; 
+      font-size: 14px; 
+      font-weight: 500; 
+      color: var(--text-primary);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .theme-toggle:hover { 
+      background: var(--bg-tertiary); 
+      transform: scale(1.05);
+    }
+    
+    .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid var(--border-primary); }
+    .tab { 
+      padding: 12px 24px; 
+      background: none; 
+      border: none; 
+      cursor: pointer; 
+      font-size: 14px; 
+      font-weight: 500; 
+      color: var(--text-secondary); 
+      border-bottom: 3px solid transparent; 
+      transition: all 0.2s; 
+    }
+    .tab:hover { background: var(--tab-hover-bg); }
+    .tab.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    
+    .filters { 
+      background: var(--bg-secondary); 
+      padding: 20px; 
+      border-radius: 8px; 
+      margin-bottom: 20px; 
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+      border: 1px solid var(--border-primary);
+      transition: background 0.3s ease, border 0.3s ease;
+    }
+    .filters h3 { font-size: 14px; font-weight: 500; margin-bottom: 15px; color: var(--text-primary); }
+    .filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+    .filter-item label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 5px; }
+    .filter-item select, .filter-item input { 
+      width: 100%; 
+      padding: 8px; 
+      border: 1px solid var(--border-primary); 
+      border-radius: 4px; 
+      font-family: inherit; 
+      font-size: 13px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      transition: all 0.3s ease;
+    }
+    .filter-item select:focus, .filter-item input:focus { 
+      outline: none; 
+      border-color: var(--accent-blue); 
+    }
+    
+    .tables-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+    @media (max-width: 1000px) { .tables-container { grid-template-columns: 1fr; } }
+    
+    .signal-table { 
+      background: var(--bg-secondary); 
+      border-radius: 8px; 
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+      overflow: hidden;
+      border: 1px solid var(--border-primary);
+      transition: background 0.3s ease, border 0.3s ease;
+    }
+    .table-header { 
+      padding: 16px; 
+      font-size: 16px; 
+      font-weight: 500; 
+      color: white; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+    }
+    .table-header.long { background: var(--accent-green); }
+    .table-header.short { background: var(--accent-red); }
+    
+    .table-wrapper { overflow-x: auto; max-height: 600px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { 
+      background: var(--bg-tertiary); 
+      padding: 12px 8px; 
+      text-align: left; 
+      font-weight: 500; 
+      font-size: 12px; 
+      color: var(--text-secondary); 
+      border-bottom: 1px solid var(--border-primary); 
+      position: sticky; 
+      top: 0; 
+    }
+    td { 
+      padding: 10px 8px; 
+      border-bottom: 1px solid var(--border-secondary); 
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+    tr:hover { background: var(--hover-bg); }
+    
+    .checkbox-cell { width: 40px; text-align: center; }
+    input[type="checkbox"] { 
+      width: 18px; 
+      height: 18px; 
+      cursor: pointer;
+      accent-color: var(--accent-blue);
+    }
+    
+    .loading { text-align: center; padding: 40px; color: var(--text-secondary); }
+    .spinner { 
+      border: 3px solid var(--spinner-border); 
+      border-top: 3px solid var(--accent-blue); 
+      border-radius: 50%; 
+      width: 40px; 
+      height: 40px; 
+      animation: spin 1s linear infinite; 
+      margin: 0 auto 20px; 
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    
+    .refresh-btn { 
+      background: var(--accent-green); 
+      color: white; 
+      border: none; 
+      padding: 10px 20px; 
+      border-radius: 4px; 
+      cursor: pointer; 
+      font-size: 14px; 
+      font-weight: 500; 
+      transition: background 0.2s; 
+      margin-right: 10px; 
+    }
+    .refresh-btn:hover { background: var(--accent-green-hover); }
+    .refresh-btn:disabled { 
+      background: var(--disabled-bg); 
+      color: var(--disabled-text);
+      cursor: not-allowed; 
+    }
+    
+    .positive { color: var(--positive); }
+    .negative { color: var(--negative); }
+    
+    .watchlist-section { 
+      background: var(--bg-secondary); 
+      border-radius: 8px; 
+      padding: 20px; 
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      border: 1px solid var(--border-primary);
+      transition: background 0.3s ease, border 0.3s ease;
+    }
+    .watchlist-section h2 { font-size: 20px; font-weight: 400; margin-bottom: 20px; color: var(--accent-blue); }
+    
+    .last-updated { color: var(--text-secondary); font-size: 12px; margin-left: 10px; font-style: italic; }
+    .cache-indicator { 
+      display: inline-block; 
+      padding: 4px 8px; 
+      border-radius: 4px; 
+      font-size: 11px; 
+      margin-left: 10px; 
+      background: var(--cache-bg); 
+      color: var(--cache-text); 
+    }
+    
+    /* Custom scrollbar */
+    .table-wrapper::-webkit-scrollbar { width: 10px; height: 10px; }
+    .table-wrapper::-webkit-scrollbar-track { background: var(--bg-primary); }
+    .table-wrapper::-webkit-scrollbar-thumb { background: var(--border-primary); border-radius: 5px; }
+    .table-wrapper::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📊 Signal Tracker</h1>
+      <button class="theme-toggle" onclick="toggleTheme()">
+        <span id="theme-icon">🌙</span>
+        <span id="theme-text">Dark Mode</span>
+      </button>
+    </div>
+    
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('daily')">Daily Signals</button>
+      <button class="tab" onclick="switchTab('125min')">125min Signals</button>
+      <button class="tab" onclick="switchTab('watchlist')">Watchlist</button>
+    </div>
+    
+    <div id="daily-tab" class="tab-content active">
+      <div class="filters">
+        <h3>Filters</h3>
+        <div class="filter-grid">
+          <div class="filter-item"><label>Supertrend</label><select id="daily-supertrend" onchange="loadDailySignals()"></select></div>
+          <div class="filter-item"><label>Sector</label><select id="daily-sector" onchange="loadDailySignals()"><option value="All">All</option></select></div>
+          <div class="filter-item"><label>Industry</label><select id="daily-industry" onchange="loadDailySignals()"><option value="All">All</option></select></div>
+          <div class="filter-item"><label>Market Cap ≥</label><input type="number" id="daily-mcap" value="10000" onchange="loadDailySignals()"></div>
+          <div class="filter-item"><label>Pct Diff ≤</label><input type="number" id="daily-pct" value="2.5" step="0.1" onchange="loadDailySignals()"></div>
+          <div class="filter-item"><label>Flatbase ≥</label><input type="number" id="daily-flat" value="3" onchange="loadDailySignals()"></div>
+        </div>
+        <div style="margin-top: 15px; display: flex; align-items: center;">
+          <button class="refresh-btn" id="daily-refresh-btn" onclick="loadDailySignals()">🔄 Refresh</button>
+          <span id="daily-last-updated" class="last-updated"></span>
+        </div>
+      </div>
+      
+      <div id="daily-loading" class="loading"><div class="spinner"></div>Loading signals...</div>
+      
+      <div id="daily-content" style="display: none;">
+        <div class="tables-container">
+          <div class="signal-table">
+            <div class="table-header long"><span>Long Signals</span><span id="daily-long-count">0</span></div>
+            <div class="table-wrapper">
+              <table>
+                <thead><tr><th class="checkbox-cell">Add</th><th>Symbol</th><th>Close</th><th>LTP %</th><th>Pct Diff</th><th>Flatbase</th></tr></thead>
+                <tbody id="daily-long-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="signal-table">
+            <div class="table-header short"><span>Short Signals</span><span id="daily-short-count">0</span></div>
+            <div class="table-wrapper">
+              <table>
+                <thead><tr><th class="checkbox-cell">Add</th><th>Symbol</th><th>Close</th><th>LTP %</th><th>Pct Diff</th><th>Flatbase</th></tr></thead>
+                <tbody id="daily-short-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="125min-tab" class="tab-content">
+      <div class="filters">
+        <h3>Filters</h3>
+        <div class="filter-grid">
+          <div class="filter-item"><label>Supertrend</label><select id="min125-supertrend" onchange="load125minSignals()"></select></div>
+          <div class="filter-item"><label>Sector</label><select id="min125-sector" onchange="load125minSignals()"><option value="All">All</option></select></div>
+          <div class="filter-item"><label>Industry</label><select id="min125-industry" onchange="load125minSignals()"><option value="All">All</option></select></div>
+          <div class="filter-item"><label>Market Cap ≥</label><input type="number" id="min125-mcap" value="10000" onchange="load125minSignals()"></div>
+          <div class="filter-item"><label>Pct Diff ≤</label><input type="number" id="min125-pct" value="2.5" step="0.1" onchange="load125minSignals()"></div>
+          <div class="filter-item"><label>Flatbase ≥</label><input type="number" id="min125-flat" value="3" onchange="load125minSignals()"></div>
+        </div>
+        <div style="margin-top: 15px; display: flex; align-items: center;">
+          <button class="refresh-btn" id="min125-refresh-btn" onclick="load125minSignals()">🔄 Refresh</button>
+          <span id="min125-last-updated" class="last-updated"></span>
+        </div>
+      </div>
+      
+      <div id="min125-loading" class="loading"><div class="spinner"></div>Loading signals...</div>
+      
+      <div id="min125-content" style="display: none;">
+        <div class="tables-container">
+          <div class="signal-table">
+            <div class="table-header long"><span>Long Signals</span><span id="min125-long-count">0</span></div>
+            <div class="table-wrapper">
+              <table>
+                <thead><tr><th class="checkbox-cell">Add</th><th>Symbol</th><th>Close</th><th>LTP %</th><th>Pct Diff</th><th>Flatbase</th></tr></thead>
+                <tbody id="min125-long-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="signal-table">
+            <div class="table-header short"><span>Short Signals</span><span id="min125-short-count">0</span></div>
+            <div class="table-wrapper">
+              <table>
+                <thead><tr><th class="checkbox-cell">Add</th><th>Symbol</th><th>Close</th><th>LTP %</th><th>Pct Diff</th><th>Flatbase</th></tr></thead>
+                <tbody id="min125-short-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="watchlist-tab" class="tab-content">
+      <div class="watchlist-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h2>📌 Watchlist</h2>
+          <div>
+            <button class="refresh-btn" id="watchlist-refresh-btn" onclick="loadWatchlist()">🔄 Refresh</button>
+            <span id="watchlist-last-updated" class="last-updated"></span>
+          </div>
+        </div>
+        
+        <div id="watchlist-loading" class="loading"><div class="spinner"></div>Loading watchlist...</div>
+        
+        <div id="watchlist-content" style="display: none;">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th class="checkbox-cell">Remove</th>
+                  <th>Symbol</th>
+                  <th>Sheet</th>
+                  <th>Supertrend</th>
+                  <th>Type</th>
+                  <th>Pct Diff</th>
+                  <th>Flatbase</th>
+                  <th>Date Added</th>
+                </tr>
+              </thead>
+              <tbody id="watchlist-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════
+    // 🔧 CONFIGURATION - EDIT THIS VALUE ONLY
+    // ═══════════════════════════════════════════════════════════
+    
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwwS6lD60PMl1luus7ljYxL590Bd6NeWa69X97Pw2mi17cIOJfVpvTOkc358XwVksP6/exec';
+    
+    // ═══════════════════════════════════════════════════════════
+    
+    let watchlistData = [];
+    let currentTab = 'daily';
+    let isLoading = false;
+
+    // Theme Management
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      
+      html.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+      
+      updateThemeButton(newTheme);
+    }
+
+    function updateThemeButton(theme) {
+      const icon = document.getElementById('theme-icon');
+      const text = document.getElementById('theme-text');
+      
+      if (theme === 'dark') {
+        icon.textContent = '☀️';
+        text.textContent = 'Light Mode';
+      } else {
+        icon.textContent = '🌙';
+        text.textContent = 'Dark Mode';
+      }
+    }
+
+    function initTheme() {
+      const savedTheme = localStorage.getItem('theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+      updateThemeButton(savedTheme);
+    }
+
+    window.onload = function() {
+      console.log('🚀 Page loaded');
+      initTheme();
+      
+      if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
+        alert('⚠️ Set APPS_SCRIPT_URL in code!');
+        return;
+      }
+      loadDailySignals();
+    };
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById(tab + '-tab').classList.add('active');
+      
+      if (tab === '125min') load125minSignals();
+      if (tab === 'watchlist') loadWatchlist();
+    }
+
+    async function loadDailySignals() {
+      if (isLoading) return;
+      isLoading = true;
+      
+      console.log('📡 Loading daily signals...');
+      const startTime = performance.now();
+      
+      try {
+        // Disable button and show loading
+        const refreshBtn = document.getElementById('daily-refresh-btn');
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = '⏳ Loading...';
+        
+        document.getElementById('daily-loading').style.display = 'block';
+        document.getElementById('daily-content').style.display = 'none';
+        
+        const supertrend = document.getElementById('daily-supertrend').value || '';
+        const sector = document.getElementById('daily-sector').value || 'All';
+        const industry = document.getElementById('daily-industry').value || 'All';
+        const mcap = document.getElementById('daily-mcap').value || 10000;
+        const pct = document.getElementById('daily-pct').value || 2.5;
+        const flat = document.getElementById('daily-flat').value || 3;
+        
+        const url = `${APPS_SCRIPT_URL}?action=getDailySignals&supertrend=${encodeURIComponent(supertrend)}&sector=${encodeURIComponent(sector)}&industry=${encodeURIComponent(industry)}&mcap=${mcap}&pct=${pct}&flat=${flat}`;
+        
+        // Parallel loading: Fetch data and watchlist simultaneously
+        const [dataResponse] = await Promise.all([
+          fetch(url),
+          loadWatchlistSilent()
+        ]);
+        
+        const data = await dataResponse.json();
+        
+        if (!data.success) {
+          throw new Error(data.error);
+        }
+        
+        // Update filters if first load
+        if (!document.getElementById('daily-supertrend').value) {
+          populateSelect('daily-supertrend', data.supertrends, data.supertrends[0]);
+          populateSelect('daily-sector', data.sectors, 'All');
+          populateSelect('daily-industry', data.industries, 'All');
+        }
+        
+        renderSignals('daily', data.longSignals, data.shortSignals);
+        
+        // Update timestamp
+        const loadTime = Math.round(performance.now() - startTime);
+        document.getElementById('daily-last-updated').textContent = 
+          `Updated ${new Date().toLocaleTimeString()} (${loadTime}ms)`;
+        
+        console.log(`✅ Daily signals loaded in ${loadTime}ms`);
+        
+      } catch (error) {
+        console.error('❌ Error loading daily signals:', error);
+        alert('Error: ' + error.message);
+      } finally {
+        isLoading = false;
+        const refreshBtn = document.getElementById('daily-refresh-btn');
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = '🔄 Refresh';
+      }
+    }
+
+    async function load125minSignals() {
+      if (isLoading) return;
+      isLoading = true;
+      
+      console.log('📡 Loading 125min signals...');
+      const startTime = performance.now();
+      
+      try {
+        const refreshBtn = document.getElementById('min125-refresh-btn');
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = '⏳ Loading...';
+        
+        document.getElementById('min125-loading').style.display = 'block';
+        document.getElementById('min125-content').style.display = 'none';
+        
+        const supertrend = document.getElementById('min125-supertrend').value || '';
+        const sector = document.getElementById('min125-sector').value || 'All';
+        const industry = document.getElementById('min125-industry').value || 'All';
+        const mcap = document.getElementById('min125-mcap').value || 10000;
+        const pct = document.getElementById('min125-pct').value || 2.5;
+        const flat = document.getElementById('min125-flat').value || 3;
+        
+        const url = `${APPS_SCRIPT_URL}?action=get125minSignals&supertrend=${encodeURIComponent(supertrend)}&sector=${encodeURIComponent(sector)}&industry=${encodeURIComponent(industry)}&mcap=${mcap}&pct=${pct}&flat=${flat}`;
+        
+        // Parallel loading
+        const [dataResponse] = await Promise.all([
+          fetch(url),
+          loadWatchlistSilent()
+        ]);
+        
+        const data = await dataResponse.json();
+        
+        if (!data.success) {
+          throw new Error(data.error);
+        }
+        
+        if (!document.getElementById('min125-supertrend').value) {
+          populateSelect('min125-supertrend', data.supertrends, data.supertrends[0]);
+          populateSelect('min125-sector', data.sectors, 'All');
+          populateSelect('min125-industry', data.industries, 'All');
+        }
+        
+        renderSignals('min125', data.longSignals, data.shortSignals);
+        
+        const loadTime = Math.round(performance.now() - startTime);
+        document.getElementById('min125-last-updated').textContent = 
+          `Updated ${new Date().toLocaleTimeString()} (${loadTime}ms)`;
+        
+        console.log(`✅ 125min signals loaded in ${loadTime}ms`);
+        
+      } catch (error) {
+        console.error('❌ Error loading 125min signals:', error);
+        alert('Error: ' + error.message);
+      } finally {
+        isLoading = false;
+        const refreshBtn = document.getElementById('min125-refresh-btn');
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = '🔄 Refresh';
+      }
+    }
+
+    function populateSelect(id, options, defaultVal) {
+      const select = document.getElementById(id);
+      select.innerHTML = '';
+      options.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt;
+        option.textContent = opt;
+        if (opt === defaultVal) option.selected = true;
+        select.appendChild(option);
+      });
+    }
+
+    function renderSignals(prefix, longSignals, shortSignals) {
+      document.getElementById(prefix + '-loading').style.display = 'none';
+      document.getElementById(prefix + '-content').style.display = 'block';
+      
+      const sheetName = prefix === 'daily' ? 'daily_signals' : '125min_signals';
+      renderTable(prefix + '-long', longSignals, sheetName, 'Long');
+      renderTable(prefix + '-short', shortSignals, sheetName, 'Short');
+      
+      document.getElementById(prefix + '-long-count').textContent = longSignals.length;
+      document.getElementById(prefix + '-short-count').textContent = shortSignals.length;
+    }
+
+    function renderTable(prefix, data, sheetName, signalType) {
+      const tbody = document.getElementById(prefix + '-tbody');
+      tbody.innerHTML = '';
+      
+      if (!data || !data.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-secondary);">No signals found</td></tr>';
+        return;
+      }
+      
+      data.forEach(row => {
+        const isInWatchlist = checkIfInWatchlist(row.symbol, sheetName, row.supertrend, signalType);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="checkbox-cell">
+            <input type="checkbox" ${isInWatchlist ? 'checked' : ''} 
+                   onchange="toggleWatchlist(this, '${row.symbol}', '${sheetName}', '${row.supertrend}', '${signalType}', ${row.pct}, ${row.flatbase})">
+          </td>
+          <td><strong>${row.symbol}</strong></td>
+          <td>${Number(row.close).toFixed(2)}</td>
+          <td class="${row.ltp >= 0 ? 'positive' : 'negative'}">${row.ltp}%</td>
+          <td>${Number(row.pct).toFixed(2)}</td>
+          <td>${row.flatbase}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Silent watchlist load (doesn't show loading UI)
+    async function loadWatchlistSilent() {
+      try {
+        const url = `${APPS_SCRIPT_URL}?action=getWatchlist`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success) {
+          watchlistData = data.watchlist;
+        }
+      } catch (error) {
+        console.error('Error loading watchlist silently:', error);
+      }
+    }
+
+    async function loadWatchlist() {
+      console.log('📡 Loading watchlist...');
+      const startTime = performance.now();
+      
+      try {
+        const refreshBtn = document.getElementById('watchlist-refresh-btn');
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = '⏳ Loading...';
+        
+        document.getElementById('watchlist-loading').style.display = 'block';
+        document.getElementById('watchlist-content').style.display = 'none';
+        
+        const url = `${APPS_SCRIPT_URL}?action=getWatchlist`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success) {
+          watchlistData = data.watchlist;
+          renderWatchlist();
+          
+          const loadTime = Math.round(performance.now() - startTime);
+          document.getElementById('watchlist-last-updated').textContent = 
+            `Updated ${new Date().toLocaleTimeString()} (${loadTime}ms)`;
+          
+          console.log(`✅ Watchlist loaded in ${loadTime}ms`);
+        }
+      } catch (error) {
+        console.error('❌ Error loading watchlist:', error);
+        alert('Error: ' + error.message);
+      } finally {
+        const refreshBtn = document.getElementById('watchlist-refresh-btn');
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = '🔄 Refresh';
+      }
+    }
+
+    function renderWatchlist() {
+      document.getElementById('watchlist-loading').style.display = 'none';
+      document.getElementById('watchlist-content').style.display = 'block';
+      
+      const tbody = document.getElementById('watchlist-tbody');
+      tbody.innerHTML = '';
+      
+      if (!watchlistData.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: var(--text-secondary);">No items in watchlist</td></tr>';
+        return;
+      }
+      
+      watchlistData.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="checkbox-cell">
+            <input type="checkbox" checked 
+                   onchange="removeFromWatchlistUI(this, '${item.symbol}', '${item.sheet}', '${item.supertrend}', '${item.type}')">
+          </td>
+          <td><strong>${item.symbol}</strong></td>
+          <td>${item.sheet}</td>
+          <td>${item.supertrend}</td>
+          <td>${item.type}</td>
+          <td>${item.pct}</td>
+          <td>${item.flatbase}</td>
+          <td>${item.dateAdded ? new Date(item.dateAdded).toLocaleDateString() : ''}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function checkIfInWatchlist(symbol, sheet, supertrend, type) {
+      return watchlistData.some(item => 
+        item.symbol === symbol && 
+        item.sheet === sheet && 
+        item.supertrend === supertrend && 
+        item.type === type
+      );
+    }
+
+    async function toggleWatchlist(checkbox, symbol, sheet, supertrend, type, pct, flatbase) {
+      if (checkbox.checked) {
+        await addToWatchlist(symbol, sheet, supertrend, type, pct, flatbase);
+      } else {
+        await removeFromWatchlist(symbol, sheet, supertrend, type);
+      }
+    }
+
+    async function removeFromWatchlistUI(checkbox, symbol, sheet, supertrend, type) {
+      if (!checkbox.checked) {
+        await removeFromWatchlist(symbol, sheet, supertrend, type);
+        setTimeout(() => {
+          loadWatchlist();
+          if (currentTab === 'daily') loadDailySignals();
+          if (currentTab === '125min') load125minSignals();
+        }, 500);
+      }
+    }
+
+    async function addToWatchlist(symbol, sheet, supertrend, type, pct, flatbase) {
+      try {
+        const url = `${APPS_SCRIPT_URL}?action=addToWatchlist&symbol=${encodeURIComponent(symbol)}&sheet=${encodeURIComponent(sheet)}&supertrend=${encodeURIComponent(supertrend)}&type=${encodeURIComponent(type)}&pct=${pct}&flatbase=${flatbase}`;
+        await fetch(url);
+        setTimeout(() => loadWatchlistSilent(), 500);
+        console.log('✅ Added to watchlist:', symbol);
+      } catch (error) {
+        console.error('❌ Error adding:', error);
+      }
+    }
+
+    async function removeFromWatchlist(symbol, sheet, supertrend, type) {
+      try {
+        const url = `${APPS_SCRIPT_URL}?action=removeFromWatchlist&symbol=${encodeURIComponent(symbol)}&sheet=${encodeURIComponent(sheet)}&supertrend=${encodeURIComponent(supertrend)}&type=${encodeURIComponent(type)}`;
+        await fetch(url);
+        setTimeout(() => loadWatchlistSilent(), 500);
+        console.log('✅ Removed from watchlist:', symbol);
+      } catch (error) {
+        console.error('❌ Error removing:', error);
+      }
+    }
+  </script>
+</body>
+</html>
