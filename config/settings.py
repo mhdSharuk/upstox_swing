@@ -36,33 +36,19 @@ TIMEFRAME_CONFIG = {
 # ==================== SUPERTREND CONFIGURATIONS ====================
 SUPERTREND_CONFIGS_125M = [
     {
-        'name': 'ST_125m_sma3',
+        'name': 'ST_125m_sma15',
         'use_sma': True,
-        'atr_period': 3,
-        'atr_multiplier': 2.0,
-        'description': 'Short-term reference with SMA'
-    },
-    {
-        'name': 'ST_125m_sma10',
-        'use_sma': True,
-        'atr_period': 10,
+        'atr_period': 15,
         'atr_multiplier': 2.0,
         'description': 'Medium-term reference with SMA'
     },
     {
-        'name': 'ST_125m_hl2_10',
+        'name': 'ST_125m_hl2_15',
         'use_sma': False,
-        'atr_period': 10,
+        'atr_period': 15,
         'atr_multiplier': 2.0,
         'description': 'Medium-term reference without SMA'
     },
-    {
-        'name': 'ST_125m_hl2_3',
-        'use_sma': False,
-        'atr_period': 3,
-        'atr_multiplier': 2.0,
-        'description': 'Short-term reference without SMA'
-    }
 ]
 
 SUPERTREND_CONFIGS_DAILY = [
@@ -80,20 +66,20 @@ SUPERTREND_CONFIGS_DAILY = [
         'atr_multiplier': 2.0,
         'description': 'Monthly reference with SMA (~20 trading days/month)'
     },
-    {
-        'name': 'ST_daily_hl2_20',
-        'use_sma': False,
-        'atr_period': 20,
-        'atr_multiplier': 2.0,
-        'description': 'Monthly reference without SMA'
-    },
-    {
-        'name': 'ST_daily_hl2_5',
-        'use_sma': False,
-        'atr_period': 5,
-        'atr_multiplier': 2.0,
-        'description': 'Weekly reference without SMA'
-    }
+    # {
+    #     'name': 'ST_daily_hl2_20',
+    #     'use_sma': False,
+    #     'atr_period': 20,
+    #     'atr_multiplier': 2.0,
+    #     'description': 'Monthly reference without SMA'
+    # },
+    # {
+    #     'name': 'ST_daily_hl2_5',
+    #     'use_sma': False,
+    #     'atr_period': 5,
+    #     'atr_multiplier': 2.0,
+    #     'description': 'Weekly reference without SMA'
+    # }
 ]
 
 # ==================== DATA RETENTION SETTINGS ====================

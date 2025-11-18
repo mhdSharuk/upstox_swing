@@ -16,8 +16,8 @@ const CONFIG = {
   
   // Parquet file names (must match your actual files in Supabase)
   FILES: {
-    DAILY: 'daily_data.parquet',
-    MIN_125: '125min_data.parquet'
+    DAILY: 'daily.parquet',
+    MIN_125: '125min.parquet'
   },
   
   // ═══════════════════════════════════════════════════════════
@@ -30,14 +30,14 @@ const CONFIG = {
     DAILY: [
       { id: 'ST_daily_sma5', label: 'SMA 5', description: 'Weekly reference with SMA' },
       { id: 'ST_daily_sma20', label: 'SMA 20', description: 'Monthly reference with SMA' },
-      { id: 'ST_daily_hl2_20', label: 'HL2 20', description: 'Monthly reference without SMA' },
-      { id: 'ST_daily_hl2_5', label: 'HL2 5', description: 'Weekly reference without SMA' }
+    //   { id: 'ST_daily_hl2_20', label: 'HL2 20', description: 'Monthly reference without SMA' },
+    //   { id: 'ST_daily_hl2_5', label: 'HL2 5', description: 'Weekly reference without SMA' }
     ],
     MIN_125: [
-      { id: 'ST_125m_sma3', label: 'SMA 3', description: 'Short-term with SMA' },
-      { id: 'ST_125m_sma10', label: 'SMA 10', description: 'Medium-term with SMA' },
-      { id: 'ST_125m_hl2_10', label: 'HL2 10', description: 'Medium-term without SMA' },
-      { id: 'ST_125m_hl2_3', label: 'HL2 3', description: 'Short-term without SMA' }
+      { id: 'ST_125m_sma15', label: 'SMA 15', description: 'Short-term with SMA 15' },
+      { id: 'ST_125m_hl2_15', label: 'HL2 15', description: 'Medium-term with HL2 15' },
+    //   { id: 'ST_125m_hl2_10', label: 'HL2 10', description: 'Medium-term without SMA' },
+    //   { id: 'ST_125m_hl2_3', label: 'HL2 3', description: 'Short-term without SMA' }
     ]
   }
 };
