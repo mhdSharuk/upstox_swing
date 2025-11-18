@@ -235,7 +235,8 @@ class SupabaseStorage:
             
             # Create parquet file in memory
             buffer = io.BytesIO()
-            df_prepared.to_parquet(buffer, engine='pyarrow', compression='snappy', index=False)
+            df_prepared.to_parquet(buffer, engine='pyarrow', compression='zstd', compression_level=9, index=False)
+
             buffer.seek(0)
             
             file_size_kb = len(buffer.getvalue()) / 1024

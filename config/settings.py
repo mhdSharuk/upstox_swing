@@ -104,7 +104,7 @@ PARQUET_RETENTION = {
 
 # ==================== SUPABASE CONFIGURATION ====================
 SUPABASE_CONFIG = {
-    'bucket_name': 'ST Swing Bucket',
+    'bucket_name': 'st-swing-bucket',
     'file_names': {
         '125min': '125min.parquet',
         'daily': 'daily.parquet'
