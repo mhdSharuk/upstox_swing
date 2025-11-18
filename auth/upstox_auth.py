@@ -1,5 +1,6 @@
 """
 Upstox Authenticator - Complete OAuth2 authentication flow
+UPDATED: Continuous TOTP display with auto-refresh
 """
 
 import requests
@@ -156,6 +157,15 @@ class UpstoxAuthenticator:
         totp = pyotp.TOTP(self.totp_secret)
         return totp.now()
     
+    def get_totp_time_remaining(self) -> int:
+        """
+        Get seconds remaining until current TOTP expires
+        
+        Returns:
+            int: Seconds remaining
+        """
+        return 30 - (int(time.time()) % 30)
+    
     def start_local_server(self, port: int = 8000) -> bool:
         """
         Start local HTTP server to capture authorization code
@@ -215,6 +225,7 @@ class UpstoxAuthenticator:
     def wait_for_authorization_code(self, timeout: int = 300) -> Optional[str]:
         """
         Wait for authorization code from callback
+        UPDATED: Continuously displays and refreshes TOTP every 30 seconds
         
         Args:
             timeout: Maximum time to wait in seconds
@@ -224,14 +235,43 @@ class UpstoxAuthenticator:
         """
         global auth_code_received
         
-        logger.info(f"Waiting for authorization (timeout: {timeout}s)...")
+        logger.info(f"\nWaiting for authorization (timeout: {timeout}s)...")
+        logger.info("=" * 60)
         
         start_time = time.time()
+        last_totp = None
+        totp_display_count = 0
+        
         while auth_code_received is None:
-            if time.time() - start_time > timeout:
-                logger.error("Timeout waiting for authorization code")
+            elapsed = time.time() - start_time
+            
+            if elapsed > timeout:
+                logger.error("\n✗ Timeout waiting for authorization code")
                 return None
+            
+            # Get current TOTP and time remaining
+            current_totp = self.generate_totp()
+            time_remaining = self.get_totp_time_remaining()
+            
+            # Display TOTP when it changes
+            if current_totp != last_totp:
+                totp_display_count += 1
+                
+                if totp_display_count > 1:
+                    logger.info("\n" + "─" * 60)
+                
+                logger.info(f"📱 CURRENT TOTP CODE: {current_totp}")
+                logger.info(f"⏱️  Code expires in: {time_remaining} seconds")
+                logger.info(f"⏳ Waiting for authorization... ({int(timeout - elapsed)}s remaining)")
+                
+                last_totp = current_totp
+            
+            # Check every 0.5 seconds
             time.sleep(0.5)
+        
+        logger.info("\n" + "=" * 60)
+        logger.info("✓ Authorization received!")
+        logger.info("=" * 60)
         
         return auth_code_received
     
@@ -276,14 +316,15 @@ class UpstoxAuthenticator:
                 "products": result.get('products', []),
             }
             
-            logger.info("=" * 20)
-            logger.info("✓ Access token obtained successfully!")
+            logger.info("\n" + "=" * 60)
+            logger.info("✓ ACCESS TOKEN OBTAINED SUCCESSFULLY!")
+            logger.info("=" * 60)
             logger.info(f"User ID: {self.user_info['user_id']}")
             logger.info(f"User Name: {self.user_info['user_name']}")
             logger.info(f"Email: {self.user_info['email']}")
             logger.info(f"Exchanges: {', '.join(self.user_info['exchanges'])}")
             logger.info("Token valid until 3:30 AM IST next day")
-            logger.info("=" * 20)
+            logger.info("=" * 60)
             
             return True
             
@@ -298,19 +339,22 @@ class UpstoxAuthenticator:
     def authenticate(self) -> bool:
         """
         Complete OAuth authentication flow
+        UPDATED: Shows initial TOTP and then continuously refreshes during wait
         
         Returns:
             bool: True if authentication successful
         """
-        logger.info("=" * 20)
+        logger.info("\n" + "=" * 60)
         logger.info("UPSTOX AUTHENTICATION")
-        logger.info("=" * 20)
+        logger.info("=" * 60)
         
         # Display current TOTP
         current_totp = self.generate_totp()
-        logger.info(f"\n📱 Current TOTP Code: {current_totp}")
-        logger.info("   (Code refreshes every 30 seconds)")
-        logger.info("   Use this code when logging in to Upstox\n")
+        time_remaining = self.get_totp_time_remaining()
+        
+        logger.info(f"\n📱 CURRENT TOTP CODE: {current_totp}")
+        logger.info(f"⏱️  Code expires in: {time_remaining} seconds")
+        logger.info("   (Code auto-refreshes every 30 seconds)\n")
         
         # Start local server
         port = int(urlparse(self.redirect_uri).port or 8000)
@@ -324,27 +368,28 @@ class UpstoxAuthenticator:
         
         webbrowser.open(auth_url)
         
-        logger.info("📋 Instructions:")
+        logger.info("📋 INSTRUCTIONS:")
         logger.info("   1. Browser will open the Upstox login page")
         logger.info("   2. Enter your Upstox User ID and Password")
         logger.info("   3. When prompted for TOTP, use the code shown above")
-        logger.info("   4. Click 'Authorize' to allow access")
-        logger.info("   5. The script will automatically capture and save the token!\n")
+        logger.info("   4. New TOTP codes will appear every 30 seconds below")
+        logger.info("   5. Click 'Authorize' to allow access")
+        logger.info("   6. The script will automatically capture and save the token!")
         
-        # Wait for authorization code
+        # Wait for authorization code (with continuous TOTP display)
         auth_code = self.wait_for_authorization_code(timeout=300)
         
         # Stop the local server
         self.stop_local_server()
         
         if not auth_code:
-            logger.error("Failed to receive authorization code!")
+            logger.error("\n✗ Failed to receive authorization code!")
             return False
         
-        logger.info(f"✓ Authorization code received: {auth_code[:10]}...\n")
+        logger.info(f"\n✓ Authorization code received: {auth_code[:10]}...")
         
         # Exchange code for access token
-        logger.info("🔄 Exchanging authorization code for access token...")
+        logger.info("\n🔄 Exchanging authorization code for access token...")
         return self.exchange_code_for_token(auth_code)
     
     def get_token(self) -> Optional[str]:

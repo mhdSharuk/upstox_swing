@@ -1,12 +1,13 @@
 """
 Instrument Mapper - Fetch and map trading symbols to instrument keys
+UPDATED: Supports filtering by market cap
 """
 
 import requests
 import gzip
 import ijson
 import pandas as pd
-from typing import Dict, List
+from typing import Dict, List, Optional, Set
 from config.settings import INSTRUMENT_FILTERS, API_CONFIG
 from utils.logger import get_logger
 from utils.validators import DataValidator
@@ -19,16 +20,25 @@ class InstrumentMapper:
     Fetch instrument data and create trading_symbol to instrument_key mapping
     """
     
-    def __init__(self):
-        """Initialize Instrument Mapper"""
+    def __init__(self, access_token: str):
+        """
+        Initialize Instrument Mapper
+        
+        Args:
+            access_token: Upstox API access token
+        """
+        self.access_token = access_token
         self.instruments_url = API_CONFIG['instruments_url']
         self.instrument_filters = INSTRUMENT_FILTERS
         self.instruments_df: pd.DataFrame = pd.DataFrame()
         self.instruments_dict: Dict[str, str] = {}
     
-    def fetch_instruments(self) -> bool:
+    def fetch_instruments(self, allowed_symbols: Optional[Set[str]] = None) -> bool:
         """
         Fetch all instruments from Upstox and filter for equity stocks
+        
+        Args:
+            allowed_symbols: Optional set of symbols to include (for market cap filtering)
         
         Returns:
             bool: True if successful
@@ -36,6 +46,9 @@ class InstrumentMapper:
         try:
             logger.info("Fetching instrument data from Upstox...")
             logger.info(f"URL: {self.instruments_url}")
+            
+            if allowed_symbols:
+                logger.info(f"Filtering for {len(allowed_symbols)} symbols with market cap >= {INSTRUMENT_FILTERS['min_market_cap']} Cr")
             
             # Stream the gzipped JSON file
             resp = requests.get(self.instruments_url, stream=True, timeout=60)
@@ -53,8 +66,14 @@ class InstrumentMapper:
                     if (item['instrument_type'] in self.instrument_filters['instrument_types'] and
                         self.instrument_filters['key_pattern'] in item['instrument_key']):
                         
+                        trading_symbol = item['trading_symbol']
+                        
+                        # If allowed_symbols is provided, only include symbols in that set
+                        if allowed_symbols and trading_symbol not in allowed_symbols:
+                            continue
+                        
                         results.append({
-                            'trading_symbol': item['trading_symbol'],
+                            'trading_symbol': trading_symbol,
                             'instrument_key': item['instrument_key'],
                             'instrument_type': item['instrument_type'],
                             'name': item.get('name', ''),
@@ -75,9 +94,12 @@ class InstrumentMapper:
             logger.info(f"✓ Successfully fetched {len(self.instruments_df)} equity instruments")
             logger.info(f"  Total instruments processed: {count}")
             
+            if allowed_symbols:
+                logger.info(f"  Filtered by market cap: {len(results)} / {len(allowed_symbols)} symbols found")
+            
             # Display sample
             logger.info("\nSample instruments:")
-            logger.info(self.instruments_df.head(10).to_string(index=False))
+            logger.info(self.instruments_df.sample(10).to_string(index=False))
             
             return True
             
@@ -106,7 +128,7 @@ class InstrumentMapper:
         df_unique = self.instruments_df.sort_values(by=['trading_symbol']).drop_duplicates(
             'trading_symbol',
             keep='last'
-        )#.tail(5)
+        )#.tail(50)
         
         # Create the mapping dictionary
         self.instruments_dict = dict(zip(df_unique['trading_symbol'], df_unique['instrument_key']))
@@ -128,6 +150,21 @@ class InstrumentMapper:
         
         return self.instruments_dict
     
+    def create_instrument_mapping(self, allowed_symbols: Optional[Set[str]] = None) -> Dict[str, str]:
+        """
+        Complete process: fetch and create mapping
+        
+        Args:
+            allowed_symbols: Optional set of symbols to include (for market cap filtering)
+        
+        Returns:
+            Dict[str, str]: Instrument mapping dictionary
+        """
+        if not self.fetch_instruments(allowed_symbols):
+            return {}
+        
+        return self.create_mapping()
+    
     def get_instruments(self) -> Dict[str, str]:
         """
         Get the instrument mapping dictionary
@@ -145,64 +182,6 @@ class InstrumentMapper:
             List[str]: List of trading symbols
         """
         return list(self.instruments_dict.keys())
-    
-    def get_instrument_key(self, trading_symbol: str) -> str:
-        """
-        Get instrument key for a specific trading symbol
-        
-        Args:
-            trading_symbol: The trading symbol to look up
-        
-        Returns:
-            str: Instrument key or empty string if not found
-        """
-        return self.instruments_dict.get(trading_symbol, '')
-    
-    def save_mapping_to_csv(self, filename: str = 'instrument_mapping.csv') -> bool:
-        """
-        Save instrument mapping to CSV file for reference
-        
-        Args:
-            filename: Output CSV filename
-        
-        Returns:
-            bool: True if successful
-        """
-        try:
-            if self.instruments_df.empty:
-                logger.error("No instruments data to save")
-                return False
-            
-            self.instruments_df.to_csv(filename, index=False)
-            logger.info(f"✓ Instrument mapping saved to {filename}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error saving instrument mapping: {e}")
-            return False
-    
-    def filter_by_symbols(self, symbols: List[str]) -> Dict[str, str]:
-        """
-        Filter mapping to only include specific symbols
-        
-        Args:
-            symbols: List of trading symbols to include
-        
-        Returns:
-            Dict[str, str]: Filtered mapping
-        """
-        filtered = {
-            symbol: key for symbol, key in self.instruments_dict.items()
-            if symbol in symbols
-        }
-        
-        logger.info(f"Filtered to {len(filtered)} symbols from {len(symbols)} requested")
-        
-        missing = set(symbols) - set(filtered.keys())
-        if missing:
-            logger.warning(f"Symbols not found: {missing}")
-        
-        return filtered
     
     def get_statistics(self) -> Dict:
         """

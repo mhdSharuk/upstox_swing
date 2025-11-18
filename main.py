@@ -1,7 +1,7 @@
 """
 Main Orchestration Script for Upstox Supertrend Project
 Ties all components together to fetch data, calculate indicators, and save to Google Sheets
-UPDATED: Refactored with separated percentage calculation and symbol info merge steps
+UPDATED: Added Google Drive parquet upload functionality
 """
 
 import sys
@@ -15,7 +15,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config.settings import (
     SUPERTREND_CONFIGS_125M,
     SUPERTREND_CONFIGS_DAILY,
-    TIMEFRAME_CONFIG
+    TIMEFRAME_CONFIG,
+    INSTRUMENT_FILTERS,
+    DRIVE_CONFIG
 )
 from config.env_loader import (
     UPSTOX_API_KEY,
@@ -35,6 +37,7 @@ from indicators.flat_base_numba import FlatBaseDetector
 from indicators.percentage_calculator import PercentageCalculator
 from indicators.symbol_info_merger import SymbolInfoMerger
 from storage.sheets_writer import GoogleSheetsWriter
+from storage.gdrive_handler import GoogleDriveHandler
 from utils.logger import setup_logging, get_logger
 
 # Setup logging
@@ -49,7 +52,7 @@ class UpstoxSupertrendPipeline:
     
     def __init__(self):
         """Initialize the pipeline"""
-        self.token_manager = TokenManager()
+        self.token_manager = TokenManager("credentials/upstox_token.json")
         self.access_token = None
         self.instruments_dict = {}
         self.historical_data = {}
@@ -58,6 +61,7 @@ class UpstoxSupertrendPipeline:
         self.with_percentages = {}  # Data after percentage calculations
         self.final_data = {}  # Final data with symbol info merged
         self.sheets_writer = None
+        self.drive_handler = None
     
     def step0_test_google_sheets(self) -> bool:
         """
@@ -112,6 +116,27 @@ class UpstoxSupertrendPipeline:
             return False
         
         logger.info("✓ Google Sheets access verified - ready to proceed!")
+        
+        # Initialize Google Drive Handler (OAuth2)
+        logger.info("\nInitializing Google Drive Handler (OAuth2)...")
+        self.drive_handler = GoogleDriveHandler()
+        
+        # Run comprehensive Google Drive authentication test
+        success, message = self.drive_handler.test_authentication()
+        
+        if not success:
+            logger.error("\n" + "=" * 60)
+            logger.error("✗ GOOGLE DRIVE ACCESS FAILED")
+            logger.error("=" * 60)
+            logger.error("Cannot proceed with pipeline until Google Drive access is working.")
+            logger.error("\nPlease ensure:")
+            logger.error("1. OAuth2 credentials file exists: credentials/oauth_credentials.json")
+            logger.error("2. You complete the browser authentication (first time only)")
+            logger.error("=" * 60)
+            return False
+        
+        logger.info("✓ Google Drive access verified - ready to proceed!")
+        
         return True
     
     def step1_authenticate(self) -> bool:
@@ -123,7 +148,7 @@ class UpstoxSupertrendPipeline:
             bool: True if authenticated successfully
         """
         logger.info("\n" + "=" * 60)
-        logger.info("STEP 1: AUTHENTICATION")
+        logger.info("STEP 1: AUTHENTICATE WITH UPSTOX")
         logger.info("=" * 60)
         
         # Try to use existing token
@@ -138,6 +163,7 @@ class UpstoxSupertrendPipeline:
         logger.warning(message)
         logger.info("\nStarting authentication flow...")
         
+        # If no valid token, get new one
         authenticator = UpstoxAuthenticator(
             UPSTOX_API_KEY,
             UPSTOX_API_SECRET,
@@ -145,6 +171,7 @@ class UpstoxSupertrendPipeline:
             UPSTOX_TOTP_SECRET
         )
         
+        # Run the authentication flow
         if authenticator.authenticate():
             # Save the new token
             self.token_manager.save_token(
@@ -154,13 +181,13 @@ class UpstoxSupertrendPipeline:
             self.access_token = authenticator.get_token()
             logger.info("✓ Authentication successful")
             return True
-        else:
-            logger.error("✗ Authentication failed")
-            return False
+        
+        logger.error("✗ Authentication failed")
+        return False
     
     def step2_fetch_instruments(self) -> bool:
         """
-        Step 2: Fetch instrument keys and create mapping
+        Step 2: Fetch instrument keys and create mapping (with market cap filtering)
         
         Returns:
             bool: True if successful
@@ -169,14 +196,34 @@ class UpstoxSupertrendPipeline:
         logger.info("STEP 2: FETCH INSTRUMENT KEYS")
         logger.info("=" * 60)
         
-        mapper = InstrumentMapper()
+        # Load symbol info CSV to filter by market cap
+        from indicators.symbol_info_merger import SymbolInfoMerger
         
-        # Fetch instruments
-        if not mapper.fetch_instruments():
-            logger.error("✗ Failed to fetch instruments")
-            return False
+        logger.info("Loading symbol info for market cap filtering...")
+        symbol_merger = SymbolInfoMerger()
         
-        self.instruments_dict = mapper.create_mapping()
+        if not symbol_merger.load_symbol_info():
+            logger.error("✗ Failed to load symbol info CSV")
+            logger.error("Cannot filter by market cap. Proceeding without filtering.")
+            allowed_symbols = None
+        else:
+            # Filter symbols with market_cap >= min_market_cap
+            min_mcap = INSTRUMENT_FILTERS['min_market_cap']
+            symbol_df = symbol_merger.symbol_info_df
+            
+            # Filter by market cap
+            filtered_df = symbol_df[symbol_df['market_cap'] >= min_mcap]
+            allowed_symbols = set(filtered_df['trading_symbol'].tolist())
+            
+            logger.info(f"✓ Symbol info loaded:")
+            logger.info(f"  Total symbols in CSV: {len(symbol_df)}")
+            logger.info(f"  Symbols with market cap >= {min_mcap} Cr: {len(allowed_symbols)}")
+            logger.info(f"  Filtered out: {len(symbol_df) - len(allowed_symbols)} symbols")
+        
+        # Fetch instruments with market cap filter
+        mapper = InstrumentMapper(self.access_token)
+        
+        self.instruments_dict = mapper.create_instrument_mapping(allowed_symbols)
         
         if not self.instruments_dict:
             logger.error("✗ Failed to create instrument mapping")
@@ -291,7 +338,7 @@ class UpstoxSupertrendPipeline:
     
     def step6_calculate_percentages(self) -> bool:
         """
-        Step 6: Calculate percentage differences (REFACTORED - calculations only)
+        Step 6: Calculate percentage differences
         
         Returns:
             bool: True if successful
@@ -329,7 +376,7 @@ class UpstoxSupertrendPipeline:
     
     def step7_merge_symbol_info(self) -> bool:
         """
-        Step 7: Merge with symbol info CSV (REFACTORED - new separate step)
+        Step 7: Merge with symbol info CSV
         
         Returns:
             bool: True if successful
@@ -398,6 +445,31 @@ class UpstoxSupertrendPipeline:
         
         return success
     
+    def step9_upload_to_google_drive(self) -> bool:
+        """
+        Step 9: Upload parquet files to Google Drive (OAuth2)
+        
+        Returns:
+            bool: True if successful
+        """
+        logger.info("\n" + "=" * 60)
+        logger.info("STEP 9: UPLOAD PARQUET FILES TO GOOGLE DRIVE")
+        logger.info("=" * 60)
+        
+        if not self.drive_handler:
+            logger.error("Google Drive handler not initialized!")
+            return False
+        
+        # Upload all timeframes as parquet files
+        success = self.drive_handler.upload_all_timeframes(self.final_data)
+        
+        if success:
+            logger.info("✓ Parquet files uploaded to Google Drive successfully")
+        else:
+            logger.error("✗ Failed to upload parquet files to Google Drive")
+        
+        return success
+    
     def run(self) -> bool:
         """
         Run the complete pipeline
@@ -445,12 +517,12 @@ class UpstoxSupertrendPipeline:
                 logger.error("Pipeline failed at Step 5: Detect Flat Bases")
                 return False
             
-            # Step 6: Calculate percentages (REFACTORED)
+            # Step 6: Calculate percentages
             if not self.step6_calculate_percentages():
                 logger.error("Pipeline failed at Step 6: Calculate Percentages")
                 return False
             
-            # Step 7: Merge with symbol info (NEW STEP)
+            # Step 7: Merge with symbol info
             if not self.step7_merge_symbol_info():
                 logger.error("Pipeline failed at Step 7: Merge Symbol Info")
                 return False
@@ -458,6 +530,11 @@ class UpstoxSupertrendPipeline:
             # Step 8: Save to Google Sheets
             if not self.step8_save_to_google_sheets():
                 logger.error("Pipeline failed at Step 8: Save to Google Sheets")
+                return False
+            
+            # Step 9: Upload to Google Drive
+            if not self.step9_upload_to_google_drive():
+                logger.error("Pipeline failed at Step 9: Upload to Google Drive")
                 return False
             
             # Success!
@@ -470,7 +547,8 @@ class UpstoxSupertrendPipeline:
             logger.info(f"End time: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
             logger.info(f"Total duration: {duration}")
             logger.info(f"Instruments processed: {len(self.instruments_dict)}")
-            logger.info(f"Data saved to: https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}")
+            logger.info(f"Google Sheets: https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}")
+            logger.info(f"Google Drive: Parquet files in folder '{DRIVE_CONFIG['folder_name']}'")
             logger.info("=" * 60)
             
             return True
