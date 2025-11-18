@@ -7,10 +7,6 @@
   
   <!-- Styles -->
   <link rel="stylesheet" href="css/styles.css">
-  
-  <!-- External Libraries -->
-  <!-- TradingView Lightweight Charts -->
-  <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
   <div class="container">
@@ -66,7 +62,7 @@
           </div>
         </div>
         <div style="margin-top: 15px; display: flex; align-items: center;">
-          <button class="refresh-btn" id="daily-refresh-btn" onclick="loadDailySignals(event.shiftKey)" title="Click to load from cache, Shift+Click to force download">🔄 Refresh</button>
+          <button class="refresh-btn" id="daily-refresh-btn" onclick="loadDailySignals(true)">🔄 Refresh</button>
           <span id="daily-last-updated" class="last-updated"></span>
         </div>
       </div>
@@ -160,7 +156,7 @@
           </div>
         </div>
         <div style="margin-top: 15px; display: flex; align-items: center;">
-          <button class="refresh-btn" id="min125-refresh-btn" onclick="load125minSignals(event.shiftKey)" title="Click to load from cache, Shift+Click to force download">🔄 Refresh</button>
+          <button class="refresh-btn" id="min125-refresh-btn" onclick="load125minSignals(true)">🔄 Refresh</button>
           <span id="min125-last-updated" class="last-updated"></span>
         </div>
       </div>
@@ -226,13 +222,13 @@
         <div class="filter-grid">
           <div class="filter-item">
             <label>Data</label>
-            <select id="charts-data" onchange="onChartDataChange()">
-              <option value="daily">Daily Data</option>
-              <option value="min125">125min Data</option>
+            <select id="charts-data" onchange="loadCharts()">
+              <option value="daily">Daily</option>
+              <option value="min125">125min</option>
             </select>
           </div>
           <div class="filter-item">
-            <label>Chart Type</label>
+            <label>Type</label>
             <select id="charts-type" onchange="loadCharts()">
               <option value="Long">Long</option>
               <option value="Short">Short</option>
@@ -241,8 +237,8 @@
           <div class="filter-item">
             <label>From</label>
             <select id="charts-from" onchange="loadCharts()">
-              <option value="filtered">Filtered Data</option>
-              <option value="watchlist">Watchlist</option>
+              <option value="filtered">Filtered Signals</option>
+              <option value="all">All Symbols</option>
             </select>
           </div>
           <div class="filter-item">
@@ -309,7 +305,14 @@
     </div>
   </div>
 
-  <!-- Application Scripts (load in order) -->
+  <!-- External Libraries -->
+  <!-- Danfo.js (optional backup for advanced data operations) -->
+  <!-- <script src="https://cdn.jsdelivr.net/npm/danfojs@1.1.2/lib/bundle.js"></script> -->
+  
+  <!-- TradingView Lightweight Charts -->
+  <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+
+  <!-- Application Scripts (LOAD IN ORDER) -->
   <script src="js/config.js"></script>
   <script src="js/dataLoader.js"></script>
   <script src="js/filters.js"></script>

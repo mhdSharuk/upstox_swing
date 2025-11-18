@@ -1,5 +1,5 @@
 /**
- * Filters Module
+ * Filters Module - ENHANCED WITH DEBUGGING
  * Handles all filtering logic for signals and charts
  */
 
@@ -50,8 +50,14 @@ class FiltersManager {
    * @returns {Object} { long: [], short: [] }
    */
   applyFilters(data, filters, supertrendConfig) {
+    console.log('=== APPLYING FILTERS ===');
+    console.log('Total rows in data:', data.length);
+    console.log('Filters:', filters);
+    console.log('Supertrend config:', supertrendConfig);
+    
     // Get latest candle for each symbol
     const latestCandles = dataLoader.getLatestCandles(data);
+    console.log('Latest candles map size:', latestCandles.size);
     
     const longSignals = [];
     const shortSignals = [];
@@ -62,14 +68,40 @@ class FiltersManager {
     const pctCol = `pct_diff_${supertrendConfig}`;
     const flatbaseCol = `flatbase_count_${supertrendConfig}`;
     
+    console.log('Looking for columns:', { directionCol, supertrendCol, pctCol, flatbaseCol });
+    
+    let processedCount = 0;
+    let skippedMissingColumns = 0;
+    let skippedFilters = 0;
+    
     latestCandles.forEach((row, symbol) => {
+      processedCount++;
+      
+      // Debug first few rows
+      if (processedCount <= 3) {
+        console.log(`Row ${processedCount} (${symbol}):`, {
+          direction: row[directionCol],
+          supertrend: row[supertrendCol],
+          pctDiff: row[pctCol],
+          flatbase: row[flatbaseCol],
+          sector: row.sector,
+          industry: row.industry,
+          market_cap: row.market_cap
+        });
+      }
+      
       // Skip if required columns don't exist
       if (row[directionCol] === undefined || row[supertrendCol] === undefined) {
+        skippedMissingColumns++;
+        if (processedCount <= 3) {
+          console.warn(`Skipping ${symbol}: missing columns`);
+        }
         return;
       }
 
       // Apply filters
       if (!this.passesFilters(row, filters, pctCol, flatbaseCol)) {
+        skippedFilters++;
         return;
       }
 
@@ -103,6 +135,14 @@ class FiltersManager {
       }
     });
     
+    console.log('=== FILTER RESULTS ===');
+    console.log('Processed:', processedCount);
+    console.log('Skipped (missing columns):', skippedMissingColumns);
+    console.log('Skipped (failed filters):', skippedFilters);
+    console.log('Long signals:', longSignals.length);
+    console.log('Short signals:', shortSignals.length);
+    console.log('======================');
+    
     return { long: longSignals, short: shortSignals };
   }
 
@@ -126,7 +166,8 @@ class FiltersManager {
     }
     
     // Market cap filter
-    if (row.market_cap < filters.mcap) {
+    const marketCap = row.market_cap || 0;
+    if (marketCap < filters.mcap) {
       return false;
     }
     
@@ -151,11 +192,16 @@ class FiltersManager {
    * @param {Array} data - Dataset to extract values from
    */
   populateFilterDropdowns(timeframe, data) {
+    console.log(`=== POPULATING FILTERS FOR ${timeframe} ===`);
+    console.log('Data length:', data.length);
+    
     const prefix = timeframe === 'daily' ? 'daily' : 'min125';
     
     // Populate supertrend dropdown
     const supertrendSelect = document.getElementById(`${prefix}-supertrend`);
     const configs = dataLoader.getSupertrendConfigs(timeframe);
+    
+    console.log('Supertrend configs:', configs);
     
     supertrendSelect.innerHTML = configs.map(config => 
       `<option value="${config.id}">${config.label}</option>`
@@ -165,19 +211,26 @@ class FiltersManager {
     if (configs.length > 0) {
       supertrendSelect.value = configs[0].id;
       this.currentFilters[timeframe].supertrend = configs[0].id;
+      console.log('Set default supertrend:', configs[0].id);
     }
     
     // Populate sector dropdown
     const sectors = dataLoader.getUniqueValues(data, 'sector');
+    console.log('Sectors found:', sectors.length);
+    
     const sectorSelect = document.getElementById(`${prefix}-sector`);
     sectorSelect.innerHTML = '<option value="All">All</option>' + 
       sectors.map(sector => `<option value="${sector}">${sector}</option>`).join('');
     
     // Populate industry dropdown
     const industries = dataLoader.getUniqueValues(data, 'industry');
+    console.log('Industries found:', industries.length);
+    
     const industrySelect = document.getElementById(`${prefix}-industry`);
     industrySelect.innerHTML = '<option value="All">All</option>' + 
       industries.map(industry => `<option value="${industry}">${industry}</option>`).join('');
+    
+    console.log('=== FILTERS POPULATED ===');
   }
 
   /**

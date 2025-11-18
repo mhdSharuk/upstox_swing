@@ -1,7 +1,6 @@
 /**
- * Data Loader Module
- * Handles loading and parsing parquet files from Supabase Storage
- * Uses Hyparquet for efficient parquet processing
+ * Data Loader Module - FINAL VERSION
+ * Uses hyparquet with rowFormat: 'object' for direct row-oriented data
  */
 
 class DataLoader {
@@ -45,16 +44,15 @@ class DataLoader {
       } else {
         console.log(`📥 Downloading ${timeframe} for first time...`);
         
-        // Check file size first
-        const headResponse = await fetch(url, { method: 'HEAD' });
-        const fileSize = parseInt(headResponse.headers.get('content-length'));
-        console.log(`File size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
-        
         // Fetch with progress
         const response = await fetch(url);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
+        const contentLength = response.headers.get('content-length');
+        const fileSize = contentLength ? parseInt(contentLength) : 0;
+        console.log(`File size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
         
         const reader = response.body.getReader();
         const chunks = [];
@@ -69,10 +67,12 @@ class DataLoader {
           receivedLength += value.length;
           
           // Log every 10%
-          const percent = Math.floor((receivedLength / fileSize) * 100);
-          if (percent >= lastLog + 10) {
-            console.log(`Downloaded: ${percent}% (${(receivedLength / 1024 / 1024).toFixed(2)} MB)`);
-            lastLog = percent;
+          if (fileSize > 0) {
+            const percent = Math.floor((receivedLength / fileSize) * 100);
+            if (percent >= lastLog + 10) {
+              console.log(`Downloaded: ${percent}% (${(receivedLength / 1024 / 1024).toFixed(2)} MB)`);
+              lastLog = percent;
+            }
           }
         }
         
@@ -92,24 +92,33 @@ class DataLoader {
         console.log(`✓ Saved ${timeframe} to browser cache`);
       }
       
-      // Use hyparquet to parse with ZSTD support
+      // Use hyparquet to parse parquet file with rowFormat: 'object'
+      console.log(`✓ Parsing ${timeframe} data with hyparquet...`);
+      
+      // Import hyparquet with compression support
       const [{ parquetRead }, { compressors }] = await Promise.all([
         import('https://cdn.jsdelivr.net/npm/hyparquet@1.4.1/+esm'),
         import('https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.1/+esm')
       ]);
       
-      console.log(`✓ Parsing ${timeframe} data...`);
-      
+      // Parse parquet file - with rowFormat: 'object' to get array of objects directly
       const data = await new Promise((resolve, reject) => {
         parquetRead({
           file: arrayBuffer,
-          compressors, // Add all compression codec support
+          compressors,
+          rowFormat: 'object', // ← This returns array of objects!
           onComplete: (rows) => resolve(rows),
           onError: (error) => reject(error)
         });
       });
       
-      console.log(`✓ Parsed ${data.length} rows from ${timeframe} data`);
+      console.log(`✓ Parsed ${data.length} rows as objects`);
+      
+      // Log sample row to verify structure
+      if (data.length > 0) {
+        console.log('Sample row:', data[0]);
+        console.log('Available columns:', Object.keys(data[0]));
+      }
       
       // Cache the data
       if (timeframe === 'daily') {
@@ -124,6 +133,7 @@ class DataLoader {
     } catch (error) {
       this.isLoading[timeframe] = false;
       console.error(`❌ Error loading ${timeframe} data:`, error);
+      console.error('Error details:', error.stack);
       throw error;
     }
   }
@@ -252,11 +262,13 @@ class DataLoader {
   getUniqueValues(data, column) {
     const values = new Set();
     data.forEach(row => {
-      if (row[column] !== null && row[column] !== undefined) {
+      if (row[column] !== null && row[column] !== undefined && row[column] !== '') {
         values.add(row[column]);
       }
     });
-    return Array.from(values).sort();
+    const uniqueArray = Array.from(values).sort();
+    console.log(`Found ${uniqueArray.length} unique values for ${column}:`, uniqueArray.slice(0, 10));
+    return uniqueArray;
   }
 
   /**
@@ -276,18 +288,36 @@ class DataLoader {
   getLatestCandles(data) {
     const latestMap = new Map();
     
+    console.log(`Processing ${data.length} rows to find latest candles...`);
+    
     // Group by symbol and get latest timestamp
     data.forEach(row => {
       const symbol = row.trading_symbol;
+      if (!symbol) {
+        console.warn('Row missing trading_symbol:', row);
+        return;
+      }
+      
       if (!latestMap.has(symbol)) {
         latestMap.set(symbol, row);
       } else {
         const existing = latestMap.get(symbol);
-        if (new Date(row.timestamp) > new Date(existing.timestamp)) {
+        const rowTime = new Date(row.timestamp);
+        const existingTime = new Date(existing.timestamp);
+        
+        if (rowTime > existingTime) {
           latestMap.set(symbol, row);
         }
       }
     });
+    
+    console.log(`Found latest candles for ${latestMap.size} symbols`);
+    
+    // Log sample of latest candles for debugging
+    const sampleSymbol = Array.from(latestMap.keys())[0];
+    if (sampleSymbol) {
+      console.log(`Sample latest candle (${sampleSymbol}):`, latestMap.get(sampleSymbol));
+    }
     
     return latestMap;
   }
