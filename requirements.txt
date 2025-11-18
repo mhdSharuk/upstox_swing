@@ -1,5 +1,5 @@
 # Upstox Supertrend Project Dependencies
-# Optimized for Python 3.10 on PythonAnywhere (512MB limit)
+# UPDATED: Supabase Storage (Google Sheets/Drive removed)
 
 # Web Framework
 Flask>=2.3.0,<4.0.0
@@ -16,16 +16,10 @@ numba>=0.56.0
 # Authentication
 pyotp>=2.8.0
 
-# Google Sheets
-gspread>=5.10.0
-google-auth>=2.16.0
-google-auth-oauthlib>=1.0.0
-google-auth-httplib2>=0.1.0
+# Supabase
+supabase>=2.0.0
 
-# Google Drive API (NEW)
-google-api-python-client>=2.70.0
-
-# Parquet file support (NEW)
+# Parquet file support
 pyarrow>=10.0.0
 
 # Data compression

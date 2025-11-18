@@ -1,6 +1,7 @@
 """
 Configuration package for Upstox Supertrend Project
 Exports all configuration variables for use across the application
+UPDATED: Supabase configuration (Google removed)
 """
 
 from .settings import (
@@ -15,18 +16,14 @@ from .settings import (
     SUPERTREND_CONFIGS_DAILY,
     
     # Retention Settings
-    CANDLE_RETENTION,
     PARQUET_RETENTION,
     
-    # Google Drive Configuration
-    DRIVE_CONFIG,
+    # Supabase Configuration
+    SUPABASE_CONFIG,
     
     # Flat Base Detection
     FLAT_BASE_TOLERANCE,
     FLAT_BASE_MIN_COUNT,
-    
-    # Google Sheets Configuration
-    SHEETS_CONFIG,
     
     # Instrument Filtering
     INSTRUMENT_FILTERS,
@@ -49,12 +46,10 @@ __all__ = [
     'TIMEFRAME_CONFIG',
     'SUPERTREND_CONFIGS_125M',
     'SUPERTREND_CONFIGS_DAILY',
-    'CANDLE_RETENTION',
     'PARQUET_RETENTION',
-    'DRIVE_CONFIG',
+    'SUPABASE_CONFIG',
     'FLAT_BASE_TOLERANCE',
     'FLAT_BASE_MIN_COUNT',
-    'SHEETS_CONFIG',
     'INSTRUMENT_FILTERS',
     'SYMBOL_INFO_CONFIG',
     'ASYNC_CONFIG',

@@ -1,8 +1,7 @@
 """
 Environment Variable Loader
 Loads credentials from .env file or environment variables
-Falls back to credentials.py if env vars not available
-UPDATED: Uses credentials/ folder for sensitive files
+UPDATED: Supabase configuration (Google Sheets/Drive removed)
 """
 
 import os
@@ -32,9 +31,9 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL', 'https://mhdsharuk.pythonanywhere.com/ups
 PYTHONANYWHERE_USERNAME = os.getenv('PYTHONANYWHERE_USERNAME', 'mhdSharuk')
 FLASK_BASE_URL = os.getenv('FLASK_BASE_URL', 'https://mhdsharuk.pythonanywhere.com')
 
-# ==================== GOOGLE SHEETS CREDENTIALS ====================
-GOOGLE_SHEET_ID = os.getenv('GOOGLE_SHEET_ID')
-SERVICE_ACCOUNT_FILE = os.getenv('SERVICE_ACCOUNT_FILE', 'credentials/service_account.json')
+# ==================== SUPABASE CREDENTIALS ====================
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
 # ==================== VALIDATION ====================
 def validate_credentials():
@@ -48,7 +47,8 @@ def validate_credentials():
         'UPSTOX_CLIENT_ID': UPSTOX_CLIENT_ID,
         'UPSTOX_TOTP_SECRET': UPSTOX_TOTP_SECRET,
         'FLASK_SECRET_KEY': FLASK_SECRET_KEY,
-        'GOOGLE_SHEET_ID': GOOGLE_SHEET_ID,
+        'SUPABASE_URL': SUPABASE_URL,
+        'SUPABASE_KEY': SUPABASE_KEY,
     }
     
     missing = [key for key, value in required_vars.items() if not value]
@@ -60,7 +60,6 @@ def validate_credentials():
 
 
 # ==================== FALLBACK TO credentials.py ====================
-# If environment variables are not set, try loading from credentials.py
 is_valid, missing = validate_credentials()
 
 if not is_valid:
@@ -72,46 +71,32 @@ if not is_valid:
             UPSTOX_API_KEY as cred_api_key,
             UPSTOX_API_SECRET as cred_api_secret,
             UPSTOX_CLIENT_ID as cred_client_id,
-            UPSTOX_REDIRECT_URI as cred_redirect_uri,
-            UPSTOX_TOTP_SECRET as cred_totp_secret,
-            FLASK_SECRET_KEY as cred_flask_secret,
-            GOOGLE_SHEET_ID as cred_sheet_id,
-            SERVICE_ACCOUNT_FILE as cred_service_account,
-            WEBHOOK_URL as cred_webhook_url,
+            UPSTOX_TOTP_SECRET as cred_totp,
+            FLASK_SECRET_KEY as cred_flask_key,
+            SUPABASE_URL as cred_supabase_url,
+            SUPABASE_KEY as cred_supabase_key
         )
         
-        # Use credentials.py values if env vars are not set
-        UPSTOX_API_KEY = UPSTOX_API_KEY or cred_api_key
-        UPSTOX_API_SECRET = UPSTOX_API_SECRET or cred_api_secret
-        UPSTOX_CLIENT_ID = UPSTOX_CLIENT_ID or cred_client_id
-        UPSTOX_REDIRECT_URI = UPSTOX_REDIRECT_URI or cred_redirect_uri
-        UPSTOX_TOTP_SECRET = UPSTOX_TOTP_SECRET or cred_totp_secret
-        FLASK_SECRET_KEY = FLASK_SECRET_KEY or cred_flask_secret
-        GOOGLE_SHEET_ID = GOOGLE_SHEET_ID or cred_sheet_id
-        SERVICE_ACCOUNT_FILE = SERVICE_ACCOUNT_FILE or cred_service_account
-        WEBHOOK_URL = WEBHOOK_URL or cred_webhook_url
+        # Override with credentials.py values if env vars not set
+        if not UPSTOX_API_KEY:
+            UPSTOX_API_KEY = cred_api_key
+        if not UPSTOX_API_SECRET:
+            UPSTOX_API_SECRET = cred_api_secret
+        if not UPSTOX_CLIENT_ID:
+            UPSTOX_CLIENT_ID = cred_client_id
+        if not UPSTOX_TOTP_SECRET:
+            UPSTOX_TOTP_SECRET = cred_totp
+        if not FLASK_SECRET_KEY:
+            FLASK_SECRET_KEY = cred_flask_key
+        if not SUPABASE_URL:
+            SUPABASE_URL = cred_supabase_url
+        if not SUPABASE_KEY:
+            SUPABASE_KEY = cred_supabase_key
         
-        print("✓ Loaded credentials from config/credentials.py (fallback)")
+        print("✓ Successfully loaded credentials from config/credentials.py")
         
-    except ImportError:
-        print("✗ ERROR: No credentials.py file found and environment variables not set!")
-        print("✗ Please either:")
-        print("  1. Create .env file with required variables")
-        print("  2. Set environment variables in your system")
-        print("  3. Create config/credentials.py")
-
-# ==================== EXPORT ALL ====================
-__all__ = [
-    'UPSTOX_API_KEY',
-    'UPSTOX_API_SECRET',
-    'UPSTOX_CLIENT_ID',
-    'UPSTOX_REDIRECT_URI',
-    'UPSTOX_TOTP_SECRET',
-    'FLASK_SECRET_KEY',
-    'WEBHOOK_URL',
-    'PYTHONANYWHERE_USERNAME',
-    'FLASK_BASE_URL',
-    'GOOGLE_SHEET_ID',
-    'SERVICE_ACCOUNT_FILE',
-    'validate_credentials',
-]
+    except ImportError as e:
+        print(f"✗ Failed to import from config/credentials.py: {e}")
+        print("Please ensure you have either:")
+        print("  1. .env file with required variables, OR")
+        print("  2. config/credentials.py with required variables")

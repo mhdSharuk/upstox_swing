@@ -1,7 +1,7 @@
 """
 Settings and configurations for the Upstox Supertrend Project
 Contains timeframe configs, indicator parameters, and API settings
-COMPLETE VERSION - All required fields included
+UPDATED: Supabase Storage configuration (Google Sheets/Drive removed)
 """
 
 # ==================== UPSTOX API CONFIGURATION ====================
@@ -11,33 +11,29 @@ API_CONFIG = {
     'intraday_endpoint': '/v3/historical-candle/intraday',
     'market_status_endpoint': '/v2/market/status',
     'instruments_url': 'https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz',
-    'rate_limit_delay': 0.1,  # Delay between API calls in seconds
+    'rate_limit_delay': 0.1,
     'max_retries': 3,
     'retry_delay': 2,
     'timeout': 30
 }
 
 # ==================== TIMEFRAME CONFIGURATION ====================
-# Based on Upstox v3 API: /v3/historical-candle/{instrument_key}/{unit}/{interval}/{to_date}/{from_date}
-# Unit options: 'minutes', 'hours', 'days', 'weeks', 'months'
-# Interval: numeric value (1-300 for minutes, 1-5 for hours, 1 for days/weeks/months)
 TIMEFRAME_CONFIG = {
     '125min': {
-        'unit': 'minutes',   # Unit for API (minutes, hours, days, etc.)
-        'interval': 125,      # Interval value (125 minutes)
-        'days_history': 90,   # Max history: 1 quarter for intervals > 15 minutes
-        'candles_per_day': 3  # Approximately 3 candles per trading day
+        'unit': 'minutes',
+        'interval': 125,
+        'days_history': 90,
+        'candles_per_day': 3
     },
     'daily': {
-        'unit': 'days',      # Unit for API
-        'interval': 1,        # Interval value (1 day)
-        'days_history': 365,  # Max history: 1 decade for days
-        'candles_per_year': 252  # Approximately 252 trading days per year
+        'unit': 'days',
+        'interval': 1,
+        'days_history': 365,
+        'candles_per_year': 252
     }
 }
 
 # ==================== SUPERTREND CONFIGURATIONS ====================
-# 125-minute timeframe configurations
 SUPERTREND_CONFIGS_125M = [
     {
         'name': 'ST_125m_sma3',
@@ -69,7 +65,6 @@ SUPERTREND_CONFIGS_125M = [
     }
 ]
 
-# Daily timeframe configurations
 SUPERTREND_CONFIGS_DAILY = [
     {
         'name': 'ST_daily_sma5',
@@ -102,24 +97,14 @@ SUPERTREND_CONFIGS_DAILY = [
 ]
 
 # ==================== DATA RETENTION SETTINGS ====================
-# Retention for Google Sheets (preview data)
-CANDLE_RETENTION = {
-    '125min': 3,  # Keep latest 3 candles per symbol
-    'daily': 3     # Keep latest 3 candles per symbol
-}
-
-# Retention for Parquet files (historical archive)
 PARQUET_RETENTION = {
-    '125min': 120,  # Keep latest 120 candles per symbol
-    'daily': 120     # Keep latest 120 candles per symbol
+    '125min': 200,
+    'daily': 200
 }
 
-# ==================== GOOGLE DRIVE CONFIGURATION ====================
-DRIVE_CONFIG = {
-    'folder_name': 'Upstox Parquet Data',  # Folder name in Google Drive
-    'folder_id': None,  # IMPORTANT: Add your shared folder ID here (see instructions)
-    'oauth_credentials_file': 'credentials/oauth_credentials.json',  # OAuth2 client credentials
-    'oauth_token_file': 'credentials/drive_oauth_token.json',  # OAuth2 access/refresh tokens
+# ==================== SUPABASE CONFIGURATION ====================
+SUPABASE_CONFIG = {
+    'bucket_name': 'ST Swing Bucket',
     'file_names': {
         '125min': '125min.parquet',
         'daily': 'daily.parquet'
@@ -127,27 +112,15 @@ DRIVE_CONFIG = {
 }
 
 # ==================== FLAT BASE DETECTION ====================
-FLAT_BASE_TOLERANCE = 0.001  # Exactly 0.1% tolerance
-FLAT_BASE_MIN_COUNT = 3      # Minimum consecutive candles to count as flat base
-
-# ==================== GOOGLE SHEETS CONFIGURATION ====================
-SHEETS_CONFIG = {
-    'sheet_id': '1c2D3KERJJSJIDRO6hzVVsiasAN3uXyypESMkThxWVZo',  # To be set by user
-    'service_account_file': 'credentials/service_account.json',
-    'sheet_names': {
-        '125min': '125min',
-        'daily': 'Daily'
-    },
-    'batch_size': 500,
-    'max_retries': 3
-}
+FLAT_BASE_TOLERANCE = 0.001
+FLAT_BASE_MIN_COUNT = 3
 
 # ==================== INSTRUMENT FILTERING ====================
 INSTRUMENT_FILTERS = {
-    'instrument_types': ['EQ'],  # Equity types
-    'key_pattern': 'INE',  # Must contain INE in instrument_key
-    'exchange': 'NSE_EQ',  # Focus on NSE equity
-    'min_market_cap': 1000  # Minimum market cap in Crores
+    'instrument_types': ['EQ'],
+    'key_pattern': 'INE',
+    'exchange': 'NSE_EQ',
+    'min_market_cap': 1000
 }
 
 # ==================== SYMBOL INFO CSV ====================
@@ -158,9 +131,9 @@ SYMBOL_INFO_CONFIG = {
 
 # ==================== ASYNC PROCESSING ====================
 ASYNC_CONFIG = {
-    'max_concurrent_requests': 40,  # Maximum concurrent API requests
-    'chunk_size': 50,  # Process instruments in chunks
-    'semaphore_limit': 40  # Limit concurrent operations
+    'max_concurrent_requests': 40,
+    'chunk_size': 50,
+    'semaphore_limit': 40
 }
 
 # ==================== LOGGING CONFIGURATION ====================
@@ -179,7 +152,7 @@ STATE_VARIABLES_TEMPLATE = {
     'prev_direction': None,
     'prev_hl2': None,
     'prev_close': None,
-    'atr_components': [],  # For ATR calculation rolling window
-    'sma_sum': None,       # For SMA calculation
-    'sma_count': None      # For SMA calculation
+    'atr_components': [],
+    'sma_sum': None,
+    'sma_count': None
 }
