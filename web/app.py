@@ -1,6 +1,7 @@
 """
 Signal Tracker - Streamlit Application
 Using st.data_editor with checkbox column for watchlist management and LARGE FONTS
+UPDATED: Added Charts tab with TradingView lightweight charts
 """
 
 import streamlit as st
@@ -12,6 +13,7 @@ import config
 import data_handler
 import watchlist_manager
 import utils
+import chart_handler
 
 
 # Page configuration
@@ -90,6 +92,23 @@ st.markdown("""
     
     .stSelectbox select {
         font-size: 20px !important;
+    }
+    
+    /* Compact styling for chart supertrend selectors */
+    .stSelectbox[data-baseweb="select"] select {
+        font-size: 14px !important;
+        padding: 6px !important;
+        height: 36px !important;
+    }
+    
+    /* Make chart area more compact */
+    div[data-testid="column"] > div {
+        padding: 8px !important;
+    }
+    
+    /* Reduce selectbox margins in chart area */
+    .stSelectbox {
+        margin-bottom: 8px !important;
     }
     
     [role="option"] {
@@ -519,6 +538,38 @@ def render_watchlist():
                 st.rerun()
 
 
+def render_charts():
+    """Render Charts tab with TradingView lightweight charts"""
+    st.subheader("📈 Charts")
+    
+    # Render filters and get filter values
+    filter_values = chart_handler.render_chart_filters('chart', None)
+    
+    if filter_values is None:
+        return
+    
+    # Extract filter values
+    df = filter_values['df']
+    supertrend = filter_values['supertrend']
+    sector = filter_values['sector']
+    industry = filter_values['industry']
+    mcap = filter_values['mcap']
+    pct = filter_values['pct']
+    flat = filter_values['flat']
+    signal_type = filter_values['signal_type']
+    data_source = filter_values['data_source']
+    timeframe = filter_values['timeframe']
+    available_supertrends = filter_values['available_supertrends']
+    
+    st.markdown("---")
+    
+    # Render charts in 2-column grid with new parameters
+    chart_handler.render_charts_grid(
+        df, supertrend, sector, industry, mcap, pct, flat,
+        signal_type, data_source, timeframe, available_supertrends
+    )
+
+
 def main():
     """Main application"""
     init_session_state()
@@ -529,7 +580,7 @@ def main():
     
     render_header()
     
-    tab1, tab2, tab3 = st.tabs(["Daily Signals", "125min Signals", "Watchlist"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Daily Signals", "125min Signals", "Watchlist", "Charts"])
     
     with tab1:
         render_daily_signals()
@@ -539,6 +590,9 @@ def main():
     
     with tab3:
         render_watchlist()
+    
+    with tab4:
+        render_charts()
 
 
 if __name__ == "__main__":
