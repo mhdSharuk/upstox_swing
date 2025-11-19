@@ -326,7 +326,8 @@ tbody tr:hover { background: var(--hover-bg); }
 
 .chart-canvas { 
   height: 350px; 
-  /* position: relative; */
+  /* width: 1000px; */
+  position: relative;
 }
 
 /* Lazy Loading Sentinel Styles */

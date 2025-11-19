@@ -134,8 +134,8 @@ class ChartRenderer {
 
     // Create chart with proper sizing and date formatting
     const chart = LightweightCharts.createChart(container, {
-      width: containerWidth,
-      height: containerHeight,
+      width: 0,//containerWidth,
+      height: 0,//containerHeight,
       layout: {
         background: { color: isDark ? '#161b22' : '#ffffff' },
         textColor: isDark ? '#c9d1d9' : '#202124',
