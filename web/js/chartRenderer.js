@@ -3,6 +3,7 @@
  * Handles rendering charts using TradingView Lightweight Charts
  * With proper data validation and timestamp formatting
  * FIX: Corrected direction logic - direction -1 = Long, direction 1 = Short
+ * FIX: Removed incorrect timezone manipulation from formatTimestamp
  */
 
 class ChartRenderer {
@@ -12,13 +13,11 @@ class ChartRenderer {
 
   /**
    * Format timestamp for TradingView (Unix timestamp in seconds)
-   * Assumes input timestamp is in IST
-   * @param {string} timestamp - ISO timestamp string (IST)
+   * @param {string} timestamp - ISO timestamp string
    * @returns {number} Unix timestamp in seconds
    */
   formatTimestamp(timestamp) {
     try {
-      // Parse the date string (assuming it's already in IST)
       const date = new Date(timestamp);
       
       // Check if valid date
@@ -27,17 +26,8 @@ class ChartRenderer {
         return null;
       }
       
-      // Get year, month, day from the date (in UTC to avoid timezone shifts)
-      const year = date.getUTCFullYear();
-      const month = date.getUTCMonth();
-      const day = date.getUTCDate();
-      
-      // Create new date with 9:15 AM IST
-      // IST is UTC+5:30, so 9:15 IST = 3:45 UTC
-      const istDate = new Date(Date.UTC(year, month, day, 3, 45, 0, 0));
-      
-      // Return Unix timestamp in seconds
-      return Math.floor(istDate.getTime() / 1000);
+      // Return Unix timestamp in seconds (no timezone manipulation needed)
+      return Math.floor(date.getTime() / 1000);
     } catch (error) {
       console.error('Error formatting timestamp:', timestamp, error);
       return null;
@@ -128,7 +118,7 @@ class ChartRenderer {
         borderColor: isDark ? '#30363d' : '#dadce0',
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 5,        // Small right margin
+        rightOffset: 10,       // Right margin for breathing room
         barSpacing: 8,         // Comfortable spacing between bars
         minBarSpacing: 0.5,    // Minimum spacing when zoomed out
         fixLeftEdge: false,
@@ -137,15 +127,13 @@ class ChartRenderer {
       },
       localization: {
         timeFormatter: (time) => {
-          // Convert Unix timestamp to IST time string
+          // Convert Unix timestamp to date string
           const date = new Date(time * 1000);
-          // Add 5.5 hours for IST (UTC+5:30)
-          const istDate = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
           
-          // Format as date only for daily data
-          const day = istDate.getUTCDate().toString().padStart(2, '0');
-          const month = (istDate.getUTCMonth() + 1).toString().padStart(2, '0');
-          const year = istDate.getUTCFullYear();
+          // Format as DD/MM/YYYY
+          const day = date.getDate().toString().padStart(2, '0');
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+          const year = date.getFullYear();
           
           return `${day}/${month}/${year}`;
         },
@@ -215,21 +203,31 @@ class ChartRenderer {
       const segments = [];
 
       supertrendData.forEach((point, index) => {
-        if (currentDirection === null || currentDirection !== point.direction) {
-          // Direction changed or first point
-          if (currentSegment.length > 0) {
-            // Save the previous segment
-            segments.push({
-              data: [...currentSegment],
-              direction: currentDirection
-            });
-            // Start new segment with connection point (last point of previous segment)
-            currentSegment = [currentSegment[currentSegment.length - 1]];
-          }
+        if (currentDirection === null) {
+          // First point
           currentDirection = point.direction;
+          currentSegment.push({ time: point.time, value: point.value });
+        } else if (currentDirection !== point.direction) {
+          // Direction changed - create vertical connection
+          // End previous segment at current time with old value
+          const lastValue = currentSegment[currentSegment.length - 1].value;
+          currentSegment.push({ time: point.time, value: lastValue });
+          
+          // Save the previous segment
+          segments.push({
+            data: [...currentSegment],
+            direction: currentDirection
+          });
+          
+          // Start new segment at SAME time with NEW value (creates vertical line)
+          currentSegment = [
+            { time: point.time, value: point.value }
+          ];
+          currentDirection = point.direction;
+        } else {
+          // Same direction, just add the point
+          currentSegment.push({ time: point.time, value: point.value });
         }
-        
-        currentSegment.push({ time: point.time, value: point.value });
         
         // If last point, save the segment
         if (index === supertrendData.length - 1 && currentSegment.length > 0) {
@@ -249,7 +247,7 @@ class ChartRenderer {
           color: color,
           lineWidth: 2,
           lineStyle: 0,
-          lineType: 1,
+          lineType: 1, // Step line (horizontal then vertical)
           crosshairMarkerVisible: true,
           lastValueVisible: false,
           priceLineVisible: false,
@@ -260,22 +258,19 @@ class ChartRenderer {
       });
     }
 
-    // Auto-zoom to show last 40 candles with proper spacing
+    // Auto-zoom to show last 30 candles with proper spacing and right margin
     if (candlestickData.length > 0) {
       const totalCandles = candlestickData.length;
-      const showCandles = Math.min(40, totalCandles); // Show last 40 candles or all if less
+      const showCandles = Math.min(30, totalCandles); // Show last 30 candles or all if less
       const lastIndex = totalCandles - 1;
       const firstVisibleIndex = Math.max(0, lastIndex - showCandles + 1);
       
-      // Use setVisibleLogicalRange for better control
-      chart.timeScale().setVisibleLogicalRange({
-        from: firstVisibleIndex,
-        to: lastIndex + 2, // Add small right padding
-      });
-      
-      // After setting visible range, fit content to height
+      // Use logical range for precise control (indices, not time values)
       setTimeout(() => {
-        chart.timeScale().fitContent();
+        chart.timeScale().setVisibleLogicalRange({
+          from: firstVisibleIndex - 0.5, // Small left padding
+          to: lastIndex + 7, // Right margin: 7 candles worth of space
+        });
       }, 100);
     }
 
