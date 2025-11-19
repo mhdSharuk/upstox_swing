@@ -2,6 +2,7 @@
  * Signal Tracker Styles
  * Complete CSS styling for the application
  * UPDATED: Larger charts with optimized spacing (2 per row)
+ * ADDED: Loading sentinel styles for lazy loading
  */
 
 :root {
@@ -326,6 +327,40 @@ tbody tr:hover { background: var(--hover-bg); }
 .chart-canvas { 
   height: 350px; 
   position: relative;
+}
+
+/* Lazy Loading Sentinel Styles */
+.charts-loading-sentinel {
+  grid-column: 1 / -1; /* Span full width */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 15px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 2px dashed var(--border-primary);
+  margin: 10px 0;
+  transition: all 0.3s ease;
+}
+
+.charts-loading-sentinel .spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--spinner-border);
+  border-top: 3px solid var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0;
+}
+
+.charts-loading-sentinel:hover {
+  border-color: var(--accent-blue);
+  background: var(--bg-tertiary);
 }
 
 /* Custom scrollbar */

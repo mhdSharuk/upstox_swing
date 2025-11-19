@@ -3,11 +3,19 @@
  * Handles rendering charts using TradingView Lightweight Charts
  * With proper data validation and timestamp formatting
  * UPDATED: Different date formats for daily vs 125min
+ * ADDED: Lazy loading with Intersection Observer API for infinite scroll
  */
 
 class ChartRenderer {
   constructor() {
     this.charts = new Map(); // Store chart instances
+    this.observer = null; // Intersection Observer instance
+    this.chartBatchSize = 20; // Number of charts to load at once
+    this.currentBatchIndex = 0; // Track current batch
+    this.allSymbols = []; // Store all symbols to render
+    this.currentSupertrendConfig = ''; // Store current supertrend config
+    this.currentTimeframe = ''; // Store current timeframe
+    this.isLoadingBatch = false; // Prevent multiple simultaneous loads
   }
 
   /**
@@ -314,7 +322,7 @@ class ChartRenderer {
   }
 
   /**
-   * Render multiple charts in a grid
+   * Render multiple charts in a grid with lazy loading
    * @param {Array} symbols - Array of symbol objects with candle data
    * @param {string} supertrendConfig - Supertrend configuration ID
    * @param {string} timeframe - 'daily' or 'min125'
@@ -326,8 +334,9 @@ class ChartRenderer {
       return;
     }
 
-    // Clear existing charts
+    // Clear existing charts and observer
     this.clearAllCharts();
+    this.disconnectObserver();
     chartsContainer.innerHTML = '';
 
     if (symbols.length === 0) {
@@ -335,21 +344,59 @@ class ChartRenderer {
       return;
     }
 
-    // Limit to first 20 symbols to avoid overloading
-    const displaySymbols = symbols.slice(0, 20);
-    if (symbols.length > 20) {
-      console.warn(`Showing first 20 of ${symbols.length} symbols`);
+    // Store all symbols and config for lazy loading
+    this.allSymbols = symbols;
+    this.currentSupertrendConfig = supertrendConfig;
+    this.currentTimeframe = timeframe;
+    this.currentBatchIndex = 0;
+    this.isLoadingBatch = false;
+
+    console.log(`📊 Total symbols to render: ${symbols.length}`);
+    console.log(`📊 Using lazy loading with batch size: ${this.chartBatchSize}`);
+
+    // Load first batch
+    await this.loadNextBatch();
+
+    // Setup lazy loading if there are more charts to load
+    if (symbols.length > this.chartBatchSize) {
+      this.setupLazyLoading();
+    }
+  }
+
+  /**
+   * Load next batch of charts
+   */
+  async loadNextBatch() {
+    if (this.isLoadingBatch) {
+      console.log('⏳ Already loading a batch, skipping...');
+      return;
     }
 
-    // Get full data for the timeframe
-    const data = await dataLoader.getData(timeframe);
+    const startIndex = this.currentBatchIndex * this.chartBatchSize;
+    const endIndex = Math.min(startIndex + this.chartBatchSize, this.allSymbols.length);
 
-    // Render each symbol's chart
-    displaySymbols.forEach((symbolInfo, index) => {
+    if (startIndex >= this.allSymbols.length) {
+      console.log('✓ All charts loaded');
+      this.removeSentinel();
+      return;
+    }
+
+    this.isLoadingBatch = true;
+    console.log(`📊 Loading batch ${this.currentBatchIndex + 1}: symbols ${startIndex + 1} to ${endIndex}`);
+
+    const chartsContainer = document.getElementById('charts-grid');
+    const batchSymbols = this.allSymbols.slice(startIndex, endIndex);
+
+    // Get full data for the timeframe
+    const data = await dataLoader.getData(this.currentTimeframe);
+
+    // Render each symbol's chart in this batch
+    for (let i = 0; i < batchSymbols.length; i++) {
+      const symbolInfo = batchSymbols[i];
       const { symbol, direction } = symbolInfo;
-      
+      const chartIndex = startIndex + i;
+
       // Create chart container
-      // direction -1 = Long, direction 1 = Short (for badge display)
       const chartWrapper = document.createElement('div');
       chartWrapper.className = 'chart-container';
       chartWrapper.innerHTML = `
@@ -359,19 +406,116 @@ class ChartRenderer {
             ${direction === -1 ? 'Long' : 'Short'}
           </span>
         </div>
-        <div class="chart-canvas" id="chart-${index}"></div>
+        <div class="chart-canvas" id="chart-${chartIndex}"></div>
       `;
-      
-      chartsContainer.appendChild(chartWrapper);
+
+      // Insert before sentinel (or append if no sentinel)
+      const sentinel = document.getElementById('charts-sentinel');
+      if (sentinel) {
+        chartsContainer.insertBefore(chartWrapper, sentinel);
+      } else {
+        chartsContainer.appendChild(chartWrapper);
+      }
 
       // Get all candles for this symbol
       const candles = dataLoader.getSymbolCandles(data, symbol);
 
-      // Render the chart with timeframe parameter
+      // Render the chart (stagger to prevent blocking UI)
       setTimeout(() => {
-        this.renderChart(`chart-${index}`, symbol, candles, supertrendConfig, direction, timeframe);
-      }, 50 * index); // Stagger chart rendering to avoid blocking UI
-    });
+        this.renderChart(`chart-${chartIndex}`, symbol, candles, this.currentSupertrendConfig, direction, this.currentTimeframe);
+      }, 50 * i);
+    }
+
+    this.currentBatchIndex++;
+    this.isLoadingBatch = false;
+
+    // Check if there are more charts to load
+    if (endIndex < this.allSymbols.length) {
+      // Ensure sentinel exists
+      if (!document.getElementById('charts-sentinel')) {
+        this.createSentinel();
+      }
+    } else {
+      // All charts loaded, remove sentinel
+      this.removeSentinel();
+    }
+  }
+
+  /**
+   * Setup Intersection Observer for lazy loading
+   */
+  setupLazyLoading() {
+    console.log('🔍 Setting up Intersection Observer for lazy loading...');
+
+    // Create sentinel element
+    this.createSentinel();
+
+    // Create Intersection Observer
+    const options = {
+      root: null, // viewport
+      rootMargin: '200px', // Start loading 200px before sentinel is visible
+      threshold: 0.01 // Trigger when even 1% is visible
+    };
+
+    this.observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !this.isLoadingBatch) {
+          console.log('📍 Sentinel visible, loading next batch...');
+          this.loadNextBatch();
+        }
+      });
+    }, options);
+
+    // Observe the sentinel
+    const sentinel = document.getElementById('charts-sentinel');
+    if (sentinel) {
+      this.observer.observe(sentinel);
+      console.log('✓ Observer watching sentinel');
+    }
+  }
+
+  /**
+   * Create sentinel element for lazy loading
+   */
+  createSentinel() {
+    const chartsContainer = document.getElementById('charts-grid');
+    if (!chartsContainer) return;
+
+    // Remove existing sentinel if any
+    this.removeSentinel();
+
+    // Create new sentinel
+    const sentinel = document.createElement('div');
+    sentinel.id = 'charts-sentinel';
+    sentinel.className = 'charts-loading-sentinel';
+    sentinel.innerHTML = `
+      <div class="spinner"></div>
+      <div>Loading more charts...</div>
+    `;
+
+    chartsContainer.appendChild(sentinel);
+  }
+
+  /**
+   * Remove sentinel element
+   */
+  removeSentinel() {
+    const sentinel = document.getElementById('charts-sentinel');
+    if (sentinel) {
+      sentinel.remove();
+      console.log('✓ Sentinel removed');
+    }
+  }
+
+  /**
+   * Disconnect Intersection Observer
+   */
+  disconnectObserver() {
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = null;
+      console.log('✓ Observer disconnected');
+    }
   }
 
   /**
