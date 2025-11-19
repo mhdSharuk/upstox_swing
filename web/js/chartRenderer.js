@@ -198,12 +198,12 @@ class ChartRenderer {
 
     // Add candlestick series
     const candlestickSeries = chart.addCandlestickSeries({
-      upColor: '#0f9d58',
-      downColor: '#d93025',
-      borderDownColor: '#d93025',
-      borderUpColor: '#0f9d58',
-      wickDownColor: '#d93025',
-      wickUpColor: '#0f9d58',
+      upColor: 'rgba(8, 153, 129, 0.1)',
+      downColor: 'rgba(242, 54, 69, 0.1)',
+      borderDownColor: '#f23645',
+      borderUpColor: '#089981',
+      wickDownColor: '#f23645',
+      wickUpColor: '#089981',
     });
 
     candlestickSeries.setData(candlestickData);
@@ -273,7 +273,7 @@ class ChartRenderer {
           lineStyle: 0,
           lineType: 1,
           crosshairMarkerVisible: true,
-          lastValueVisible: false,
+          lastValueVisible: true,
           priceLineVisible: false,
           title: '',
         });
