@@ -268,7 +268,7 @@ async function loadCharts() {
     
     console.log(`Found ${filteredSymbols.length} symbols matching all filters`);
     
-    // Render charts
+    // Render charts - pass timeframe parameter
     await chartRenderer.renderChartsGrid(filteredSymbols, chartFilters.supertrend, timeframe);
     
     // Show content
@@ -443,8 +443,8 @@ async function loadSymbolChart() {
       badge.style.display = 'none';
     }
     
-    // Render chart
-    chartRenderer.renderChart('symbols-chart', symbol, candles, supertrendConfig, direction);
+    // Render chart - UPDATED: Pass timeframe parameter
+    chartRenderer.renderChart('symbols-chart', symbol, candles, supertrendConfig, direction, timeframe);
     
     // Show content
     document.getElementById('symbols-loading').style.display = 'none';

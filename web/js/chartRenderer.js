@@ -1,8 +1,8 @@
 /**
- * Chart Renderer Module - FIXED VERSION
+ * Chart Renderer Module - UPDATED VERSION
  * Handles rendering charts using TradingView Lightweight Charts
  * With proper data validation and timestamp formatting
- * FIX: Blue for direction 1, Yellow for direction -1
+ * UPDATED: Different date formats for daily vs 125min
  */
 
 class ChartRenderer {
@@ -34,6 +34,39 @@ class ChartRenderer {
   }
 
   /**
+   * Format date for display based on timeframe
+   * @param {number} time - Unix timestamp in seconds
+   * @param {string} timeframe - 'daily' or 'min125'
+   * @returns {string} Formatted date string
+   */
+  formatDateForDisplay(time, timeframe) {
+    const date = new Date(time * 1000);
+    
+    // Day names (3 letters)
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const day = dayNames[date.getDay()];
+    
+    // Month names (3 letters)
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = monthNames[date.getMonth()];
+    
+    // Date and year
+    const dateNum = date.getDate();
+    const year = String(date.getFullYear()).slice(-2); // Last 2 digits
+    
+    // For daily: "Thu 19 Nov '25"
+    if (timeframe === 'daily') {
+      return `${day} ${dateNum} ${month} '${year}`;
+    }
+    
+    // For 125min: "Thu 19 Nov '25 13:25"
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${day} ${dateNum} ${month} '${year} ${hours}:${minutes}`;
+  }
+
+  /**
    * Validate candle data
    * @param {Object} candle - Single candle object
    * @returns {boolean} True if valid
@@ -54,8 +87,9 @@ class ChartRenderer {
    * @param {Array} candles - Array of candle data for the symbol
    * @param {string} supertrendConfig - Supertrend configuration ID
    * @param {number} direction - Current direction (-1 or 1)
+   * @param {string} timeframe - 'daily' or 'min125' for date formatting
    */
-  renderChart(containerId, symbol, candles, supertrendConfig, direction) {
+  renderChart(containerId, symbol, candles, supertrendConfig, direction, timeframe = 'daily') {
     const container = document.getElementById(containerId);
     if (!container) {
       console.error(`Container ${containerId} not found`);
@@ -77,7 +111,7 @@ class ChartRenderer {
       return;
     }
 
-    console.log(`Rendering ${symbol}: ${validCandles.length} valid candles`);
+    console.log(`Rendering ${symbol} (${timeframe}): ${validCandles.length} valid candles`);
 
     // Clear existing chart if any
     container.innerHTML = '';
@@ -90,7 +124,7 @@ class ChartRenderer {
     const containerHeight = container.clientHeight || 300;
     const containerWidth = container.clientWidth;
 
-    // Create chart with proper sizing
+    // Create chart with proper sizing and date formatting
     const chart = LightweightCharts.createChart(container, {
       width: containerWidth,
       height: containerHeight,
@@ -126,15 +160,8 @@ class ChartRenderer {
       },
       localization: {
         timeFormatter: (time) => {
-          // Convert Unix timestamp to date string
-          const date = new Date(time * 1000);
-          
-          // Format as DD/MM/YYYY
-          const day = date.getDate().toString().padStart(2, '0');
-          const month = (date.getMonth() + 1).toString().padStart(2, '0');
-          const year = date.getFullYear();
-          
-          return `${day}/${month}/${year}`;
+          // Use different formats based on timeframe
+          return this.formatDateForDisplay(time, timeframe);
         },
       },
     });
@@ -340,9 +367,9 @@ class ChartRenderer {
       // Get all candles for this symbol
       const candles = dataLoader.getSymbolCandles(data, symbol);
 
-      // Render the chart
+      // Render the chart with timeframe parameter
       setTimeout(() => {
-        this.renderChart(`chart-${index}`, symbol, candles, supertrendConfig, direction);
+        this.renderChart(`chart-${index}`, symbol, candles, supertrendConfig, direction, timeframe);
       }, 50 * index); // Stagger chart rendering to avoid blocking UI
     });
   }
