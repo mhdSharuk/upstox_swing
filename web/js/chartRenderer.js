@@ -2,6 +2,7 @@
  * Chart Renderer Module - FIXED VERSION
  * Handles rendering charts using TradingView Lightweight Charts
  * With proper data validation and timestamp formatting
+ * FIX: Corrected direction logic - direction -1 = Long, direction 1 = Short
  */
 
 class ChartRenderer {
@@ -63,7 +64,7 @@ class ChartRenderer {
    * @param {string} symbol - Trading symbol
    * @param {Array} candles - Array of candle data for the symbol
    * @param {string} supertrendConfig - Supertrend configuration ID
-   * @param {number} direction - Current direction (1 or -1)
+   * @param {number} direction - Current direction (-1 for long, 1 for short)
    */
   renderChart(containerId, symbol, candles, supertrendConfig, direction) {
     const container = document.getElementById(containerId);
@@ -96,30 +97,42 @@ class ChartRenderer {
     const theme = document.documentElement.getAttribute('data-theme') || 'light';
     const isDark = theme === 'dark';
 
-    // Create chart
+    // Get container dimensions
+    const containerHeight = container.clientHeight || 300;
+    const containerWidth = container.clientWidth;
+
+    // Create chart with proper sizing
     const chart = LightweightCharts.createChart(container, {
-      width: container.clientWidth,
-      height: 300,
+      width: containerWidth,
+      height: containerHeight,
       layout: {
         background: { color: isDark ? '#161b22' : '#ffffff' },
         textColor: isDark ? '#c9d1d9' : '#202124',
       },
       grid: {
-        vertLines: { visible: false }, // Hide vertical grid lines
-        horzLines: { visible: false }, // Hide horizontal grid lines
+        vertLines: { visible: false },
+        horzLines: { visible: false },
       },
       crosshair: {
         mode: LightweightCharts.CrosshairMode.Normal,
       },
       rightPriceScale: {
         borderColor: isDark ? '#30363d' : '#dadce0',
+        autoScale: true,
+        scaleMargins: {
+          top: 0.1,    // 10% margin at top
+          bottom: 0.1, // 10% margin at bottom
+        },
       },
       timeScale: {
         borderColor: isDark ? '#30363d' : '#dadce0',
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 12, // Add right margin (empty space on right)
-        barSpacing: 10, // Spacing between bars
+        rightOffset: 5,        // Small right margin
+        barSpacing: 8,         // Comfortable spacing between bars
+        minBarSpacing: 0.5,    // Minimum spacing when zoomed out
+        fixLeftEdge: false,
+        fixRightEdge: false,
         shiftVisibleRangeOnNewBar: true,
       },
       localization: {
@@ -153,8 +166,8 @@ class ChartRenderer {
           close: parseFloat(candle.close)
         };
       })
-      .filter(d => d !== null) // Remove any invalid entries
-      .sort((a, b) => a.time - b.time); // Sort by Unix timestamp (numeric)
+      .filter(d => d !== null)
+      .sort((a, b) => a.time - b.time);
 
     if (candlestickData.length === 0) {
       container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">No valid timestamp data</div>';
@@ -193,7 +206,7 @@ class ChartRenderer {
         };
       })
       .filter(d => d !== null)
-      .sort((a, b) => a.time - b.time); // Sort by Unix timestamp (numeric)
+      .sort((a, b) => a.time - b.time);
 
     if (supertrendData.length > 0) {
       // Create continuous segments that change color based on direction
@@ -228,14 +241,15 @@ class ChartRenderer {
       });
 
       // Render each segment as step line
+      // FIXED: direction -1 = Blue (Long), direction 1 = Yellow (Short)
       segments.forEach(segment => {
-        const color = segment.direction === 1 ? '#1a73e8' : '#FFD700'; // Blue for long, Yellow for short
+        const color = segment.direction === -1 ? '#1a73e8' : '#FFD700';
         
         const lineSeries = chart.addLineSeries({
           color: color,
           lineWidth: 2,
-          lineStyle: 0, // 0 = Solid
-          lineType: 1, // 1 = WithSteps (step line: horizontal then vertical)
+          lineStyle: 0,
+          lineType: 1,
           crosshairMarkerVisible: true,
           lastValueVisible: false,
           priceLineVisible: false,
@@ -246,15 +260,23 @@ class ChartRenderer {
       });
     }
 
-    // Set visible range to show last 30 candles
+    // Auto-zoom to show last 40 candles with proper spacing
     if (candlestickData.length > 0) {
-      const lastIndex = candlestickData.length - 1;
-      const firstVisibleIndex = Math.max(0, lastIndex - 29); // Show last 30 candles (0-indexed, so -29)
+      const totalCandles = candlestickData.length;
+      const showCandles = Math.min(40, totalCandles); // Show last 40 candles or all if less
+      const lastIndex = totalCandles - 1;
+      const firstVisibleIndex = Math.max(0, lastIndex - showCandles + 1);
       
+      // Use setVisibleLogicalRange for better control
       chart.timeScale().setVisibleLogicalRange({
         from: firstVisibleIndex,
-        to: lastIndex + 2, // Add 2 for right margin spacing
+        to: lastIndex + 2, // Add small right padding
       });
+      
+      // After setting visible range, fit content to height
+      setTimeout(() => {
+        chart.timeScale().fitContent();
+      }, 100);
     }
 
     // Store chart instance
@@ -264,7 +286,10 @@ class ChartRenderer {
     const resizeObserver = new ResizeObserver(entries => {
       if (entries.length === 0 || entries[0].target !== container) return;
       const newRect = entries[0].contentRect;
-      chart.applyOptions({ width: newRect.width });
+      chart.applyOptions({ 
+        width: newRect.width,
+        height: newRect.height || 300
+      });
     });
 
     resizeObserver.observe(container);
@@ -308,13 +333,14 @@ class ChartRenderer {
       const { symbol, direction } = symbolInfo;
       
       // Create chart container
+      // FIXED: direction -1 = Long, direction 1 = Short
       const chartWrapper = document.createElement('div');
       chartWrapper.className = 'chart-container';
       chartWrapper.innerHTML = `
         <div class="chart-header">
           <span class="chart-symbol">${symbol}</span>
-          <span class="chart-type-badge ${direction === 1 ? 'long' : 'short'}">
-            ${direction === 1 ? 'Long' : 'Short'}
+          <span class="chart-type-badge ${direction === -1 ? 'long' : 'short'}">
+            ${direction === -1 ? 'Long' : 'Short'}
           </span>
         </div>
         <div class="chart-canvas" id="chart-${index}"></div>

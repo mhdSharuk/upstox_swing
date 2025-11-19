@@ -146,14 +146,14 @@ class SupabaseStorage:
         logger.info(f"  Rows after retention: {len(df_prepared)}")
         
         # Optimize data types to reduce file size
-        original_size = df_prepared.memory_usage(deep=True).sum() / 1024  # KB
-        logger.info(f"  Original memory size: {original_size:.2f} KB")
+        original_size = (df_prepared.memory_usage(deep=True).sum() / 1024) / 1024  # KB
+        logger.info(f"  Original memory size: {original_size:.2f} MB")
         
         df_prepared = self._optimize_datatypes(df_prepared)
         
-        optimized_size = df_prepared.memory_usage(deep=True).sum() / 1024  # KB
+        optimized_size = (df_prepared.memory_usage(deep=True).sum() / 1024) / 1024  # KB
         reduction = ((original_size - optimized_size) / original_size) * 100
-        logger.info(f"  Optimized memory size: {optimized_size:.2f} KB")
+        logger.info(f"  Optimized memory size: {optimized_size:.2f} MB")
         logger.info(f"  Size reduction: {reduction:.1f}%")
         
         return df_prepared
@@ -239,8 +239,8 @@ class SupabaseStorage:
 
             buffer.seek(0)
             
-            file_size_kb = len(buffer.getvalue()) / 1024
-            logger.info(f"  Parquet file size: {file_size_kb:.2f} KB")
+            file_size_kb = (len(buffer.getvalue()) / 1024) / 1024
+            logger.info(f"  Parquet file size: {file_size_kb:.2f} MB")
             
             # Upload to Supabase Storage (upsert overwrites existing file)
             self.client.storage.from_(self.bucket_name).upload(

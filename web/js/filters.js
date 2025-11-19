@@ -1,6 +1,7 @@
 /**
- * Filters Module - ENHANCED WITH DEBUGGING
+ * Filters Module - FIXED VERSION
  * Handles all filtering logic for signals and charts
+ * FIX: Use correct column names that match Python backend (pct_diff_avg3_ instead of pct_diff_)
  */
 
 class FiltersManager {
@@ -63,9 +64,10 @@ class FiltersManager {
     const shortSignals = [];
     
     // Get column names for the selected supertrend
+    // FIXED: Use pct_diff_avg3_ to match Python backend column names
     const directionCol = `direction_${supertrendConfig}`;
     const supertrendCol = `supertrend_${supertrendConfig}`;
-    const pctCol = `pct_diff_${supertrendConfig}`;
+    const pctCol = `pct_diff_avg3_${supertrendConfig}`; // ← FIXED: Python creates pct_diff_avg3_ and pct_diff_latest_
     const flatbaseCol = `flatbase_count_${supertrendConfig}`;
     
     console.log('Looking for columns:', { directionCol, supertrendCol, pctCol, flatbaseCol });
@@ -106,6 +108,7 @@ class FiltersManager {
       }
 
       // Determine signal type based on direction
+      // FIXED: direction -1 = Long (below supertrend), direction 1 = Short (above supertrend)
       const direction = row[directionCol];
       const close = row.close;
       const supertrend = row[supertrendCol];
@@ -128,9 +131,10 @@ class FiltersManager {
         marketCap: row.market_cap || 0
       };
       
-      if (direction === 1) {
+      // FIXED: direction -1 = Long, direction 1 = Short
+      if (direction === -1) {
         longSignals.push(signal);
-      } else if (direction === -1) {
+      } else if (direction === 1) {
         shortSignals.push(signal);
       }
     });
@@ -142,6 +146,10 @@ class FiltersManager {
     console.log('Long signals:', longSignals.length);
     console.log('Short signals:', shortSignals.length);
     console.log('======================');
+    
+    // Sort both arrays by pctDiff in ascending order (smallest first)
+    longSignals.sort((a, b) => Math.abs(parseFloat(a.pctDiff)) - Math.abs(parseFloat(b.pctDiff)));
+    shortSignals.sort((a, b) => Math.abs(parseFloat(a.pctDiff)) - Math.abs(parseFloat(b.pctDiff)));
     
     return { long: longSignals, short: shortSignals };
   }
@@ -289,11 +297,12 @@ class FiltersManager {
   filterSymbolsForCharts(data, chartFilters) {
     const latestCandles = dataLoader.getLatestCandles(data);
     const directionCol = `direction_${chartFilters.supertrend}`;
-    const pctCol = `pct_diff_${chartFilters.supertrend}`;
+    const pctCol = `pct_diff_avg3_${chartFilters.supertrend}`; // ← FIXED: Use avg3 column
     const flatbaseCol = `flatbase_count_${chartFilters.supertrend}`;
     
     // Determine target direction based on chart type
-    const targetDirection = chartFilters.chartType === 'Long' ? 1 : -1;
+    // FIXED: Long = -1, Short = 1
+    const targetDirection = chartFilters.chartType === 'Long' ? -1 : 1;
     
     const filteredSymbols = [];
     

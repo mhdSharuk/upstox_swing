@@ -1,12 +1,14 @@
 /**
  * Main Application Module
  * Orchestrates all functionality - tabs, data loading, filtering, rendering
+ * UPDATED: Added Symbols tab for individual symbol chart viewing
  */
 
 // Global state
 let watchlistData = [];
 let currentTab = 'daily';
 let isLoading = false;
+let symbolsTabInitialized = false;
 
 // ═══════════════════════════════════════════════════════════
 // THEME MANAGEMENT
@@ -67,6 +69,8 @@ function switchTab(tab) {
     loadWatchlist();
   } else if (tab === 'charts') {
     loadChartsTab();
+  } else if (tab === 'symbols') {
+    loadSymbolsTab();
   }
 }
 
@@ -282,6 +286,157 @@ function onChartDataChange() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// SYMBOLS TAB (NEW)
+// ═══════════════════════════════════════════════════════════
+
+async function loadSymbolsTab() {
+  console.log('📈 Loading symbols tab...');
+  
+  if (!symbolsTabInitialized) {
+    await initializeSymbolsTab();
+    symbolsTabInitialized = true;
+  }
+}
+
+async function initializeSymbolsTab() {
+  try {
+    // Load default timeframe data (daily)
+    const timeframe = document.getElementById('symbols-timeframe').value;
+    const data = await dataLoader.getData(timeframe);
+    
+    // Populate supertrend dropdown
+    populateSymbolSupertrendDropdown(timeframe);
+    
+    // Populate symbol dropdown with all unique symbols
+    populateSymbolDropdown(data);
+    
+    console.log('✓ Symbols tab initialized');
+    
+  } catch (error) {
+    console.error('❌ Error initializing symbols tab:', error);
+    alert('Error initializing symbols tab: ' + error.message);
+  }
+}
+
+function populateSymbolDropdown(data) {
+  const symbolSelect = document.getElementById('symbols-select');
+  
+  // Get unique symbols sorted alphabetically
+  const symbols = [...new Set(data.map(row => row.trading_symbol))].sort();
+  
+  console.log(`Found ${symbols.length} unique symbols`);
+  
+  // Populate dropdown
+  symbolSelect.innerHTML = '<option value="">-- Select a symbol --</option>' +
+    symbols.map(symbol => `<option value="${symbol}">${symbol}</option>`).join('');
+}
+
+function populateSymbolSupertrendDropdown(timeframe) {
+  const supertrendSelect = document.getElementById('symbols-supertrend');
+  const configs = dataLoader.getSupertrendConfigs(timeframe);
+  
+  supertrendSelect.innerHTML = configs.map(config => 
+    `<option value="${config.id}">${config.label}</option>`
+  ).join('');
+}
+
+async function onSymbolTimeframeChange() {
+  const timeframe = document.getElementById('symbols-timeframe').value;
+  
+  console.log(`Timeframe changed to: ${timeframe}`);
+  
+  try {
+    // Load data for new timeframe
+    const data = await dataLoader.getData(timeframe);
+    
+    // Update supertrend dropdown
+    populateSymbolSupertrendDropdown(timeframe);
+    
+    // Update symbol dropdown
+    populateSymbolDropdown(data);
+    
+    // Clear current chart
+    document.getElementById('symbols-content').style.display = 'none';
+    document.getElementById('symbols-empty').style.display = 'block';
+    document.getElementById('symbols-select').value = '';
+    
+  } catch (error) {
+    console.error('❌ Error changing timeframe:', error);
+    alert('Error loading data: ' + error.message);
+  }
+}
+
+async function loadSymbolChart() {
+  const symbol = document.getElementById('symbols-select').value;
+  
+  if (!symbol) {
+    document.getElementById('symbols-content').style.display = 'none';
+    document.getElementById('symbols-empty').style.display = 'block';
+    return;
+  }
+  
+  console.log(`📈 Loading chart for ${symbol}...`);
+  
+  try {
+    document.getElementById('symbols-loading').style.display = 'block';
+    document.getElementById('symbols-content').style.display = 'none';
+    document.getElementById('symbols-empty').style.display = 'none';
+    
+    // Get selected timeframe and supertrend
+    const timeframe = document.getElementById('symbols-timeframe').value;
+    const supertrendConfig = document.getElementById('symbols-supertrend').value;
+    
+    // Load data
+    const data = await dataLoader.getData(timeframe);
+    
+    // Get candles for this symbol
+    const candles = dataLoader.getSymbolCandles(data, symbol);
+    
+    if (candles.length === 0) {
+      alert(`No data found for ${symbol}`);
+      document.getElementById('symbols-loading').style.display = 'none';
+      document.getElementById('symbols-empty').style.display = 'block';
+      return;
+    }
+    
+    // Get latest candle for direction badge
+    const latestCandle = candles[candles.length - 1];
+    const directionCol = `direction_${supertrendConfig}`;
+    const direction = latestCandle[directionCol];
+    
+    // Update chart title and badge
+    document.getElementById('symbols-chart-title').textContent = symbol;
+    const badge = document.getElementById('symbols-chart-badge');
+    if (direction === -1) {
+      badge.textContent = 'Long';
+      badge.className = 'chart-type-badge long';
+      badge.style.display = 'inline-block';
+    } else if (direction === 1) {
+      badge.textContent = 'Short';
+      badge.className = 'chart-type-badge short';
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+    
+    // Render chart
+    chartRenderer.renderChart('symbols-chart', symbol, candles, supertrendConfig, direction);
+    
+    // Show content
+    document.getElementById('symbols-loading').style.display = 'none';
+    document.getElementById('symbols-content').style.display = 'block';
+    
+    console.log(`✓ Chart loaded for ${symbol}`);
+    
+  } catch (error) {
+    console.error('❌ Error loading symbol chart:', error);
+    alert('Error loading chart: ' + error.message);
+    document.getElementById('symbols-loading').style.display = 'none';
+    document.getElementById('symbols-empty').style.display = 'block';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // TABLE RENDERING
 // ═══════════════════════════════════════════════════════════
 
@@ -295,7 +450,7 @@ function renderSignalsTable(tbodyId, signals, sheet, supertrend) {
   }
   
   signals.forEach(signal => {
-    const type = signal.direction === 1 ? 'Long' : 'Short';
+    const type = signal.direction === -1 ? 'Long' : 'Short';
     const isInWatchlist = checkIfInWatchlist(signal.symbol, sheet, supertrend, type);
     
     const tr = document.createElement('tr');

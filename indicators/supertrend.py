@@ -1,7 +1,7 @@
 """
-Supertrend Calculator - Optimized with vectorized NumPy/Pandas operations
-Matches Pine Script exactly, without Numba dependency
-UPDATED: Progress logging shows percentages instead of counts
+Supertrend Calculator - 100% Pine Script Match
+Optimized with vectorized NumPy/Pandas operations
+Matches the exact logic from Pine Script normal_supertrend()
 """
 
 import pandas as pd
@@ -28,14 +28,51 @@ def _calculate_supertrend_vectorized(
     """
     Vectorized supertrend calculation matching Pine Script exactly
     
+    Pine Script Reference:
+    ----------------------
+    normal_supertrend(factor, volPeriod, use_ema) =>
+        float st_atr = ta.atr(volPeriod)
+        src = hl2
+        
+        float upperBand = na
+        float lowerBand = na
+        
+        if use_ema
+            upperBand := ta.sma(src, volPeriod) + factor * st_atr
+            lowerBand := ta.sma(src, volPeriod) - factor * st_atr
+        else
+            upperBand := src + factor * st_atr
+            lowerBand := src - factor * st_atr
+        
+        prevLowerBand = nz(lowerBand[1])
+        prevUpperBand = nz(upperBand[1])
+        
+        lowerBand := lowerBand > prevLowerBand or src[1] < prevLowerBand ? lowerBand : prevLowerBand
+        upperBand := upperBand < prevUpperBand or src[1] > prevUpperBand ? upperBand : prevUpperBand
+        
+        int direction = na
+        float superTrend = na
+        prevSuperTrend = superTrend[1]
+        
+        if na(st_atr[1])
+            direction := 1
+        else if prevSuperTrend == prevUpperBand
+            direction := src > upperBand ? -1 : 1
+        else
+            direction := src < lowerBand ? 1 : -1
+        
+        superTrend := direction == -1 ? lowerBand : upperBand
+        
+        [superTrend, direction, lowerBand, upperBand]
+    
     Args:
         high: High prices array
         low: Low prices array
         close: Close prices array
-        hl2: HL2 values array
-        atr: ATR values array
-        source: Source values (HL2 or SMA of HL2)
-        atr_multiplier: Multiplier for ATR bands
+        hl2: HL2 values array (high + low) / 2
+        atr: ATR values array (calculated with RMA/EMA)
+        source: Source values - either hl2 OR sma(hl2, period) based on use_sma
+        atr_multiplier: Multiplier for ATR bands (factor in Pine Script)
     
     Returns:
         Tuple: (supertrend, direction, upperBand, lowerBand) arrays
@@ -48,50 +85,76 @@ def _calculate_supertrend_vectorized(
     supertrend = np.full(n, np.nan, dtype=np.float64)
     direction = np.full(n, np.nan, dtype=np.float64)
     
-    # Calculate initial bands
+    # Pine Script: upperBand := source + factor * st_atr
+    # Pine Script: lowerBand := source - factor * st_atr
     upperBand = source + atr_multiplier * atr
     lowerBand = source - atr_multiplier * atr
     
     # Adjust bands based on previous values
+    # Pine Script:
+    #   prevLowerBand = nz(lowerBand[1])
+    #   prevUpperBand = nz(upperBand[1])
+    #   lowerBand := lowerBand > prevLowerBand or src[1] < prevLowerBand ? lowerBand : prevLowerBand
+    #   upperBand := upperBand < prevUpperBand or src[1] > prevUpperBand ? upperBand : prevUpperBand
+    
     for i in range(1, n):
+        # nz(lowerBand[1]) - get previous lowerBand, use current if NaN
         prev_lowerBand = lowerBand[i-1] if not np.isnan(lowerBand[i-1]) else lowerBand[i]
         prev_upperBand = upperBand[i-1] if not np.isnan(upperBand[i-1]) else upperBand[i]
+        
+        # src[1] - previous hl2 value
         prev_hl2 = hl2[i-1]
         
         # Adjust lowerBand
+        # lowerBand := lowerBand > prevLowerBand or src[1] < prevLowerBand ? lowerBand : prevLowerBand
         if lowerBand[i] > prev_lowerBand or prev_hl2 < prev_lowerBand:
             lowerBand[i] = lowerBand[i]
         else:
             lowerBand[i] = prev_lowerBand
         
         # Adjust upperBand
+        # upperBand := upperBand < prevUpperBand or src[1] > prevUpperBand ? upperBand : prevUpperBand
         if upperBand[i] < prev_upperBand or prev_hl2 > prev_upperBand:
             upperBand[i] = upperBand[i]
         else:
             upperBand[i] = prev_upperBand
     
     # Determine direction and supertrend
+    # Pine Script:
+    #   prevSuperTrend = superTrend[1]
+    #   if na(st_atr[1])
+    #       direction := 1
+    #   else if prevSuperTrend == prevUpperBand
+    #       direction := src > upperBand ? -1 : 1
+    #   else
+    #       direction := src < lowerBand ? 1 : -1
+    #   superTrend := direction == -1 ? lowerBand : upperBand
+    
     for i in range(n):
+        # if na(st_atr[1])
         if i == 0 or np.isnan(atr[i-1]):
             direction[i] = 1
         else:
+            # Get adjusted previous values
             prev_supertrend = supertrend[i-1]
             prev_upperBand = upperBand[i-1]
-            prev_lowerBand = lowerBand[i-1]
             current_hl2 = hl2[i]
             
+            # else if prevSuperTrend == prevUpperBand
             if prev_supertrend == prev_upperBand:
+                # direction := src > upperBand ? -1 : 1
                 if current_hl2 > upperBand[i]:
                     direction[i] = -1
                 else:
                     direction[i] = 1
             else:
+                # direction := src < lowerBand ? 1 : -1
                 if current_hl2 < lowerBand[i]:
                     direction[i] = 1
                 else:
                     direction[i] = -1
         
-        # Set supertrend based on direction
+        # superTrend := direction == -1 ? lowerBand : upperBand
         if direction[i] == -1:
             supertrend[i] = lowerBand[i]
         else:
@@ -103,6 +166,7 @@ def _calculate_supertrend_vectorized(
 def _calculate_sma_vectorized(values: np.ndarray, period: int) -> np.ndarray:
     """
     Vectorized Simple Moving Average calculation
+    Pine Script equivalent: ta.sma(src, period)
     
     Args:
         values: Input array
@@ -157,9 +221,12 @@ class SupertrendCalculator:
     
     Pine Script Reference:
     - HL2 = (high + low) / 2
-    - ATR = ta.atr() uses RMA (exponential moving average)
-    - use_ema parameter: When True, use SMA of HL2; when False, use raw HL2
-    - direction: -1 (downtrend/below supertrend), 1 (uptrend/above supertrend)
+    - ATR = ta.atr() uses RMA (exponential moving average with alpha = 1/period)
+    - use_sma parameter: When True, use SMA of HL2; when False, use raw HL2
+    - direction: -1 (price below supertrend, LONG), 1 (price above supertrend, SHORT)
+    
+    Note: In Pine Script, the parameter is called 'use_ema' but it actually uses SMA, not EMA.
+          We call it 'use_sma' for clarity.
     """
     
     def __init__(self):
@@ -177,9 +244,12 @@ class SupertrendCalculator:
         """
         Calculate supertrend indicator matching Pine Script exactly
         
+        Pine Script equivalent:
+        normal_supertrend(atr_multiplier, atr_period, use_sma)
+        
         Args:
             df: DataFrame with OHLC data (must have 'high', 'low', 'close', 'hl2')
-            atr_period: Period for ATR calculation
+            atr_period: Period for ATR calculation (volPeriod in Pine Script)
             atr_multiplier: Multiplier for ATR bands (factor in Pine Script)
             use_sma: If True, use SMA of HL2 (use_ema=true in Pine); if False, use raw HL2
             config_name: Name for the configuration (for column naming)
@@ -196,7 +266,8 @@ class SupertrendCalculator:
                 logger.error(f"Missing required column: {col}")
                 return df
         
-        # Calculate ATR using RMA
+        # Calculate ATR using RMA (like Pine Script's ta.atr())
+        # Pine Script: float st_atr = ta.atr(volPeriod)
         atr = self.atr_calculator.calculate_atr(
             df['high'],
             df['low'],
@@ -205,9 +276,13 @@ class SupertrendCalculator:
         )
         
         # Calculate source (HL2 with or without SMA)
+        # Pine Script: src = hl2
+        # Pine Script: if use_ema then source = ta.sma(src, volPeriod) else source = src
         if use_sma:
+            # Use SMA of HL2 (when use_ema=true in Pine Script)
             source_np = _calculate_sma_vectorized(df['hl2'].values, atr_period)
         else:
+            # Use raw HL2 (when use_ema=false in Pine Script)
             source_np = df['hl2'].values
         
         # Convert to numpy arrays

@@ -24,6 +24,7 @@
       <button class="tab active" onclick="switchTab('daily')">Daily Signals</button>
       <button class="tab" onclick="switchTab('125min')">125min Signals</button>
       <button class="tab" onclick="switchTab('charts')">Charts</button>
+      <button class="tab" onclick="switchTab('symbols')">Symbols</button>
       <button class="tab" onclick="switchTab('watchlist')">Watchlist</button>
     </div>
     
@@ -266,6 +267,51 @@
       </div>
     </div>
     
+    <!-- Symbols Tab (NEW) -->
+    <div id="symbols-tab" class="tab-content">
+      <div class="filters">
+        <h3>Symbol Chart Viewer</h3>
+        <div class="filter-grid">
+          <div class="filter-item">
+            <label>Timeframe</label>
+            <select id="symbols-timeframe" onchange="onSymbolTimeframeChange()">
+              <option value="daily">Daily</option>
+              <option value="min125">125min</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>Supertrend</label>
+            <select id="symbols-supertrend" onchange="loadSymbolChart()"></select>
+          </div>
+          <div class="filter-item" style="grid-column: span 2;">
+            <label>Select Symbol</label>
+            <select id="symbols-select" onchange="loadSymbolChart()">
+              <option value="">-- Select a symbol --</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      <div id="symbols-loading" class="loading" style="display: none;">
+        <div class="spinner"></div>
+        Loading chart...
+      </div>
+      
+      <div id="symbols-content" style="display: none;">
+        <div class="chart-container" style="max-width: 100%; margin: 20px 0;">
+          <div class="chart-header">
+            <span class="chart-symbol" id="symbols-chart-title">Select a symbol</span>
+            <span class="chart-type-badge" id="symbols-chart-badge" style="display: none;"></span>
+          </div>
+          <div class="chart-canvas" id="symbols-chart" style="height: 500px;"></div>
+        </div>
+      </div>
+      
+      <div id="symbols-empty" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+        Select a symbol to view its chart
+      </div>
+    </div>
+    
     <!-- Watchlist Tab -->
     <div id="watchlist-tab" class="tab-content">
       <div class="watchlist-section">
@@ -306,9 +352,6 @@
   </div>
 
   <!-- External Libraries -->
-  <!-- Danfo.js (optional backup for advanced data operations) -->
-  <!-- <script src="https://cdn.jsdelivr.net/npm/danfojs@1.1.2/lib/bundle.js"></script> -->
-  
   <!-- TradingView Lightweight Charts -->
   <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 
