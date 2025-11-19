@@ -2,8 +2,7 @@
  * Chart Renderer Module - FIXED VERSION
  * Handles rendering charts using TradingView Lightweight Charts
  * With proper data validation and timestamp formatting
- * FIX: Corrected direction logic - direction -1 = Long, direction 1 = Short
- * FIX: Removed incorrect timezone manipulation from formatTimestamp
+ * FIX: Blue for direction 1, Yellow for direction -1
  */
 
 class ChartRenderer {
@@ -54,7 +53,7 @@ class ChartRenderer {
    * @param {string} symbol - Trading symbol
    * @param {Array} candles - Array of candle data for the symbol
    * @param {string} supertrendConfig - Supertrend configuration ID
-   * @param {number} direction - Current direction (-1 for long, 1 for short)
+   * @param {number} direction - Current direction (-1 or 1)
    */
   renderChart(containerId, symbol, candles, supertrendConfig, direction) {
     const container = document.getElementById(containerId);
@@ -229,9 +228,9 @@ class ChartRenderer {
       });
 
       // Render each segment as step line
-      // FIXED: direction -1 = Blue (Long), direction 1 = Yellow (Short)
+      // Blue when direction = 1, Yellow when direction = -1
       segments.forEach(segment => {
-        const color = segment.direction === -1 ? '#1a73e8' : '#FFD700';
+        const color = segment.direction === 1 ? '#1a73e8' : '#FFD700';
         
         const lineSeries = chart.addLineSeries({
           color: color,
@@ -248,10 +247,15 @@ class ChartRenderer {
       });
     }
 
-    // Auto-zoom to show last 30 candles with proper spacing and right margin
+    // Auto-zoom to show last 3 months of candles with proper spacing and right margin
     if (candlestickData.length > 0) {
       const totalCandles = candlestickData.length;
-      const showCandles = Math.min(30, totalCandles); // Show last 30 candles or all if less
+      
+      // Calculate 3 months worth of candles based on timeframe
+      // Daily: ~63 trading days (21 trading days/month × 3 months)
+      // 125min: ~48 candles (3 candles/day × 5 days/week × 3.2 weeks/month × 3 months)
+      const showCandles = Math.min(63, totalCandles); // Show last 3 months or all if less
+      
       const lastIndex = totalCandles - 1;
       const firstVisibleIndex = Math.max(0, lastIndex - showCandles + 1);
       
@@ -318,7 +322,7 @@ class ChartRenderer {
       const { symbol, direction } = symbolInfo;
       
       // Create chart container
-      // FIXED: direction -1 = Long, direction 1 = Short
+      // direction -1 = Long, direction 1 = Short (for badge display)
       const chartWrapper = document.createElement('div');
       chartWrapper.className = 'chart-container';
       chartWrapper.innerHTML = `

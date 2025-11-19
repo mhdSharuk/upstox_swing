@@ -1,6 +1,7 @@
 /**
  * Signal Tracker Styles
  * Complete CSS styling for the application
+ * UPDATED: Larger charts with optimized spacing (2 per row)
  */
 
 :root {
@@ -277,11 +278,11 @@ tbody tr:hover { background: var(--hover-bg); }
   color: var(--cache-text); 
 }
 
-/* Charts Tab Specific Styles */
+/* Charts Tab Specific Styles - UPDATED: Larger charts with optimized spacing */
 .charts-grid { 
   display: grid; 
   grid-template-columns: 1fr 1fr; 
-  gap: 20px; 
+  gap: 15px; 
   margin-top: 20px;
 }
 
@@ -323,7 +324,7 @@ tbody tr:hover { background: var(--hover-bg); }
 .chart-type-badge.short { background: var(--accent-red); color: white; }
 
 .chart-canvas { 
-  height: 300px; 
+  height: 350px; 
   position: relative;
 }
 

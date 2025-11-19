@@ -1,7 +1,7 @@
 /**
  * Main Application Module
  * Orchestrates all functionality - tabs, data loading, filtering, rendering
- * UPDATED: Added Symbols tab for individual symbol chart viewing
+ * UPDATED: Hardcoded supertrend values for instant switching
  */
 
 // Global state
@@ -233,9 +233,14 @@ async function load125minSignals(forceRefresh = false) {
 async function loadChartsTab() {
   console.log('📊 Loading charts tab...');
   
-  // Populate initial filter dropdowns
+  // Get initial data source
   const dataSource = document.getElementById('charts-data').value || 'daily';
-  filtersManager.populateChartFilters(dataSource);
+  
+  // Load data for initial timeframe
+  const data = await dataLoader.getData(dataSource);
+  
+  // Populate all filter dropdowns (including Sector, Industry)
+  await filtersManager.populateChartFilters(dataSource, data);
   
   // Load charts with current filters
   await loadCharts();
@@ -249,17 +254,19 @@ async function loadCharts() {
     document.getElementById('charts-loading').style.display = 'block';
     document.getElementById('charts-content').style.display = 'none';
     
-    // Get chart filters
+    // Get chart filters (now includes Sector, Industry, Market Cap)
     const chartFilters = filtersManager.getCurrentFilters('charts');
     
     // Load data for selected timeframe
     const timeframe = chartFilters.data;
     const data = await dataLoader.getData(timeframe);
     
-    // Filter symbols based on chart filters
+    console.log('📊 Chart filters:', chartFilters);
+    
+    // Filter symbols based on chart filters (all filters from Charts tab)
     const filteredSymbols = filtersManager.filterSymbolsForCharts(data, chartFilters);
     
-    console.log(`Found ${filteredSymbols.length} symbols matching chart filters`);
+    console.log(`Found ${filteredSymbols.length} symbols matching all filters`);
     
     // Render charts
     await chartRenderer.renderChartsGrid(filteredSymbols, chartFilters.supertrend, timeframe);
@@ -278,15 +285,28 @@ async function loadCharts() {
   }
 }
 
-// Handle chart data source change
-function onChartDataChange() {
+// Handle chart data source change - immediately update all filter dropdowns
+async function onChartDataChange() {
   const dataSource = document.getElementById('charts-data').value;
-  filtersManager.populateChartFilters(dataSource);
-  loadCharts();
+  
+  console.log(`📊 Charts data source changed to: ${dataSource}`);
+  
+  try {
+    // Load data for new data source
+    const data = await dataLoader.getData(dataSource);
+    
+    // Immediately populate all filters (Supertrend + Sector + Industry)
+    await filtersManager.populateChartFilters(dataSource, data);
+    
+    // Load charts with new data source
+    await loadCharts();
+  } catch (error) {
+    console.error('❌ Error changing data source:', error);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
-// SYMBOLS TAB (NEW)
+// SYMBOLS TAB
 // ═══════════════════════════════════════════════════════════
 
 async function loadSymbolsTab() {
@@ -304,7 +324,7 @@ async function initializeSymbolsTab() {
     const timeframe = document.getElementById('symbols-timeframe').value;
     const data = await dataLoader.getData(timeframe);
     
-    // Populate supertrend dropdown
+    // Populate supertrend dropdown with hardcoded values
     populateSymbolSupertrendDropdown(timeframe);
     
     // Populate symbol dropdown with all unique symbols
@@ -333,7 +353,11 @@ function populateSymbolDropdown(data) {
 
 function populateSymbolSupertrendDropdown(timeframe) {
   const supertrendSelect = document.getElementById('symbols-supertrend');
-  const configs = dataLoader.getSupertrendConfigs(timeframe);
+  
+  // Use hardcoded configs from filtersManager
+  const configs = filtersManager.supertrendConfigs[timeframe];
+  
+  console.log('Populating symbol supertrend (hardcoded) for:', timeframe);
   
   supertrendSelect.innerHTML = configs.map(config => 
     `<option value="${config.id}">${config.label}</option>`
@@ -343,13 +367,13 @@ function populateSymbolSupertrendDropdown(timeframe) {
 async function onSymbolTimeframeChange() {
   const timeframe = document.getElementById('symbols-timeframe').value;
   
-  console.log(`Timeframe changed to: ${timeframe}`);
+  console.log(`📈 Symbol timeframe changed to: ${timeframe}`);
   
   try {
     // Load data for new timeframe
     const data = await dataLoader.getData(timeframe);
     
-    // Update supertrend dropdown
+    // Immediately update hardcoded supertrend dropdown
     populateSymbolSupertrendDropdown(timeframe);
     
     // Update symbol dropdown

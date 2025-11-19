@@ -1,7 +1,8 @@
 /**
  * Filters Module - FIXED VERSION
  * Handles all filtering logic for signals and charts
- * FIX: Use correct column names that match Python backend (pct_diff_avg3_ instead of pct_diff_)
+ * FIX: Corrected chart filtering to match Daily/125min signals
+ * FIX: Hardcoded supertrend values for instant switching
  */
 
 class FiltersManager {
@@ -10,6 +11,18 @@ class FiltersManager {
       daily: this.getDefaultFilters(),
       min125: this.getDefaultFilters(),
       charts: this.getDefaultChartFilters()
+    };
+    
+    // Hardcoded supertrend configurations
+    this.supertrendConfigs = {
+      daily: [
+        { id: 'ST_daily_sma5', label: 'SMA 5' },
+        { id: 'ST_daily_sma20', label: 'SMA 20' }
+      ],
+      min125: [
+        { id: 'ST_125m_sma15', label: 'SMA 15' },
+        { id: 'ST_125m_hl2_15', label: 'HL2 15' }
+      ]
     };
   }
 
@@ -64,10 +77,9 @@ class FiltersManager {
     const shortSignals = [];
     
     // Get column names for the selected supertrend
-    // FIXED: Use pct_diff_avg3_ to match Python backend column names
     const directionCol = `direction_${supertrendConfig}`;
     const supertrendCol = `supertrend_${supertrendConfig}`;
-    const pctCol = `pct_diff_avg3_${supertrendConfig}`; // ← FIXED: Python creates pct_diff_avg3_ and pct_diff_latest_
+    const pctCol = `pct_diff_avg3_${supertrendConfig}`;
     const flatbaseCol = `flatbase_count_${supertrendConfig}`;
     
     console.log('Looking for columns:', { directionCol, supertrendCol, pctCol, flatbaseCol });
@@ -108,7 +120,7 @@ class FiltersManager {
       }
 
       // Determine signal type based on direction
-      // FIXED: direction -1 = Long (below supertrend), direction 1 = Short (above supertrend)
+      // direction -1 = Long, direction 1 = Short
       const direction = row[directionCol];
       const close = row.close;
       const supertrend = row[supertrendCol];
@@ -131,7 +143,7 @@ class FiltersManager {
         marketCap: row.market_cap || 0
       };
       
-      // FIXED: direction -1 = Long, direction 1 = Short
+      // direction -1 = Long, direction 1 = Short
       if (direction === -1) {
         longSignals.push(signal);
       } else if (direction === 1) {
@@ -205,11 +217,11 @@ class FiltersManager {
     
     const prefix = timeframe === 'daily' ? 'daily' : 'min125';
     
-    // Populate supertrend dropdown
+    // Populate supertrend dropdown with hardcoded values
     const supertrendSelect = document.getElementById(`${prefix}-supertrend`);
-    const configs = dataLoader.getSupertrendConfigs(timeframe);
+    const configs = this.supertrendConfigs[timeframe];
     
-    console.log('Supertrend configs:', configs);
+    console.log('Supertrend configs (hardcoded):', configs);
     
     supertrendSelect.innerHTML = configs.map(config => 
       `<option value="${config.id}">${config.label}</option>`
@@ -242,12 +254,16 @@ class FiltersManager {
   }
 
   /**
-   * Populate chart filter dropdowns
+   * Populate chart filter dropdowns with hardcoded values and data-driven options
    * @param {string} timeframe - Current selected data timeframe
+   * @param {Array} data - Dataset to extract Sector/Industry from
    */
-  populateChartFilters(timeframe) {
+  async populateChartFilters(timeframe, data = null) {
+    // Populate hardcoded supertrend dropdown
     const supertrendSelect = document.getElementById('charts-supertrend');
-    const configs = dataLoader.getSupertrendConfigs(timeframe);
+    const configs = this.supertrendConfigs[timeframe];
+    
+    console.log('Populating chart filters (hardcoded) for:', timeframe);
     
     supertrendSelect.innerHTML = configs.map(config => 
       `<option value="${config.id}">${config.label}</option>`
@@ -256,6 +272,23 @@ class FiltersManager {
     if (configs.length > 0) {
       supertrendSelect.value = configs[0].id;
       this.currentFilters.charts.supertrend = configs[0].id;
+    }
+    
+    // Populate Sector and Industry dropdowns if data is provided
+    if (data) {
+      // Populate sector dropdown
+      const sectors = dataLoader.getUniqueValues(data, 'sector');
+      const sectorSelect = document.getElementById('charts-sector');
+      sectorSelect.innerHTML = '<option value="All">All</option>' + 
+        sectors.map(sector => `<option value="${sector}">${sector}</option>`).join('');
+      
+      // Populate industry dropdown
+      const industries = dataLoader.getUniqueValues(data, 'industry');
+      const industrySelect = document.getElementById('charts-industry');
+      industrySelect.innerHTML = '<option value="All">All</option>' + 
+        industries.map(industry => `<option value="${industry}">${industry}</option>`).join('');
+      
+      console.log(`  Populated Sectors: ${sectors.length}, Industries: ${industries.length}`);
     }
   }
 
@@ -271,8 +304,10 @@ class FiltersManager {
       return {
         data: document.getElementById('charts-data').value,
         chartType: document.getElementById('charts-type').value,
-        from: document.getElementById('charts-from').value,
         supertrend: document.getElementById('charts-supertrend').value,
+        sector: document.getElementById('charts-sector').value,
+        industry: document.getElementById('charts-industry').value,
+        mcap: parseFloat(document.getElementById('charts-mcap').value),
         pctDiff: parseFloat(document.getElementById('charts-pct').value),
         flatbase: parseInt(document.getElementById('charts-flat').value)
       };
@@ -290,40 +325,100 @@ class FiltersManager {
 
   /**
    * Filter symbols for charts based on chart filters
+   * Uses Charts tab's own Sector, Industry, and Market Cap filters
    * @param {Array} data - Full dataset
-   * @param {Object} chartFilters - Chart filter configuration
+   * @param {Object} chartFilters - Chart filter configuration (includes all filters)
    * @returns {Array} Filtered symbols matching criteria
    */
   filterSymbolsForCharts(data, chartFilters) {
+    console.log('=== FILTERING SYMBOLS FOR CHARTS ===');
+    console.log('Chart filters:', chartFilters);
+    
     const latestCandles = dataLoader.getLatestCandles(data);
     const directionCol = `direction_${chartFilters.supertrend}`;
-    const pctCol = `pct_diff_avg3_${chartFilters.supertrend}`; // ← FIXED: Use avg3 column
+    const supertrendCol = `supertrend_${chartFilters.supertrend}`;
+    const pctCol = `pct_diff_avg3_${chartFilters.supertrend}`;
     const flatbaseCol = `flatbase_count_${chartFilters.supertrend}`;
     
     // Determine target direction based on chart type
-    // FIXED: Long = -1, Short = 1
+    // direction -1 = Long, direction 1 = Short
     const targetDirection = chartFilters.chartType === 'Long' ? -1 : 1;
     
+    console.log('Target direction:', targetDirection, '(', chartFilters.chartType, ')');
+    
     const filteredSymbols = [];
+    let processedCount = 0;
+    let directionMatches = 0;
+    let passedAllFilters = 0;
     
     latestCandles.forEach((row, symbol) => {
+      processedCount++;
+      
+      // Check if columns exist
+      if (row[directionCol] === undefined || row[supertrendCol] === undefined) {
+        return;
+      }
+      
       // Check direction matches chart type
       if (row[directionCol] !== targetDirection) {
         return;
       }
       
-      // Apply pct diff and flatbase filters
-      const pctDiff = Math.abs(row[pctCol] || 0);
-      const flatbase = row[flatbaseCol] || 0;
+      directionMatches++;
       
-      if (pctDiff <= chartFilters.pctDiff && flatbase >= chartFilters.flatbase) {
-        filteredSymbols.push({
-          symbol: symbol,
-          direction: targetDirection,
-          row: row
-        });
+      // Apply ALL filters from Charts tab
+      
+      // 1. Sector filter
+      if (chartFilters.sector !== 'All' && row.sector !== chartFilters.sector) {
+        return;
       }
+      
+      // 2. Industry filter
+      if (chartFilters.industry !== 'All' && row.industry !== chartFilters.industry) {
+        return;
+      }
+      
+      // 3. Market Cap filter
+      const marketCap = row.market_cap || 0;
+      if (marketCap < chartFilters.mcap) {
+        return;
+      }
+      
+      // 4. Pct Diff filter
+      const pctDiff = Math.abs(row[pctCol] || 0);
+      if (pctDiff > chartFilters.pctDiff) {
+        return;
+      }
+      
+      // 5. Flatbase filter
+      const flatbase = row[flatbaseCol] || 0;
+      if (flatbase < chartFilters.flatbase) {
+        return;
+      }
+      
+      // Passed all filters!
+      passedAllFilters++;
+      filteredSymbols.push({
+        symbol: symbol,
+        direction: targetDirection,
+        row: row
+      });
     });
+    
+    console.log('Charts filtering results:');
+    console.log('  Processed:', processedCount);
+    console.log('  Direction matches:', directionMatches);
+    console.log('  Passed all filters:', passedAllFilters);
+    
+    // Sort by pctDiff in ascending order (smallest first)
+    filteredSymbols.sort((a, b) => {
+      const pctDiffA = Math.abs(a.row[pctCol] || 0);
+      const pctDiffB = Math.abs(b.row[pctCol] || 0);
+      return pctDiffA - pctDiffB;
+    });
+    
+    console.log('  Symbols sorted by pctDiff (ascending)');
+    console.log('=== CHARTS FILTERING COMPLETE ===');
     
     return filteredSymbols;
   }
