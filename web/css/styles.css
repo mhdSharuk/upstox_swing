@@ -1,8 +1,7 @@
 /**
  * Signal Tracker Styles
  * Complete CSS styling for the application
- * UPDATED: Larger charts with optimized spacing (2 per row)
- * ADDED: Loading sentinel styles for lazy loading
+ * UPDATED: Full-width charts with minimal gaps, mobile-responsive
  */
 
 :root {
@@ -62,11 +61,26 @@ body {
   font-size: 13px; 
   background: var(--bg-primary); 
   color: var(--text-primary); 
-  padding: 20px;
+  padding: 20px 10px;
   transition: background 0.3s ease, color 0.3s ease;
 }
 
-.container { max-width: 1400px; margin: 0 auto; }
+/* Main container - full width for charts, constrained for other content */
+.container { 
+  max-width: 100%; 
+  margin: 0 auto;
+}
+
+/* Restrict width for non-chart content */
+.header,
+.tabs,
+.filters,
+.tables-container,
+.watchlist-section { 
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+}
 
 .header { 
   display: flex; 
@@ -279,31 +293,37 @@ tbody tr:hover { background: var(--hover-bg); }
   color: var(--cache-text); 
 }
 
-/* Charts Tab Specific Styles - UPDATED: Larger charts with optimized spacing */
+/* ============================================================ */
+/* CHARTS TAB - FULL WIDTH LAYOUT */
+/* ============================================================ */
+
+/* Charts grid - full screen width with minimal gap */
 .charts-grid { 
   display: grid; 
   grid-template-columns: 1fr 1fr; 
-  gap: 15px; 
+  gap: 8px; 
   margin-top: 20px;
+  width: 100%;
+  max-width: 100%;
 }
 
-@media (max-width: 1000px) { .charts-grid { grid-template-columns: 1fr; } }
-
+/* Chart container - minimal padding to maximize chart space */
 .chart-container { 
   background: var(--bg-secondary); 
-  border-radius: 8px; 
-  padding: 10px; 
+  border-radius: 6px; 
+  padding: 6px; 
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   border: 1px solid var(--border-primary);
   transition: background 0.3s ease, border 0.3s ease;
+  min-width: 0; /* Prevent overflow */
+  overflow: hidden;
 }
 
 .chart-header { 
   display: flex; 
   justify-content: space-between; 
   align-items: center; 
-  /* margin-bottom: 10px; */
-  /* padding-bottom: 10px; */
+  padding: 6px 8px;
   border-bottom: 1px solid var(--border-primary);
 }
 
@@ -324,15 +344,18 @@ tbody tr:hover { background: var(--hover-bg); }
 .chart-type-badge.long { background: var(--accent-green); color: white; }
 .chart-type-badge.short { background: var(--accent-red); color: white; }
 
+/* Chart canvas - full width of container */
 .chart-canvas { 
   height: 350px; 
-  /* width: 1000px; */
+  width: 100%;
   position: relative;
+  min-width: 0;
+  overflow: hidden;
 }
 
-/* Lazy Loading Sentinel Styles */
+/* Lazy Loading Sentinel */
 .charts-loading-sentinel {
-  grid-column: 1 / -1; /* Span full width */
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -362,6 +385,77 @@ tbody tr:hover { background: var(--hover-bg); }
 .charts-loading-sentinel:hover {
   border-color: var(--accent-blue);
   background: var(--bg-tertiary);
+}
+
+/* ============================================================ */
+/* MOBILE RESPONSIVE LAYOUT */
+/* ============================================================ */
+
+@media (max-width: 768px) {
+  body {
+    padding: 10px 5px;
+  }
+  
+  /* Single column for charts on mobile */
+  .charts-grid { 
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  
+  /* Slightly taller charts on mobile for better readability */
+  .chart-canvas {
+    height: 300px;
+  }
+  
+  /* Adjust header spacing */
+  .header {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  
+  /* Stack tabs on very small screens */
+  .tabs {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  
+  .tab {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+  
+  /* Adjust filter grid for mobile */
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Tablet size adjustments */
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* Charts remain in 2 columns but with adjusted spacing */
+  .charts-grid {
+    gap: 10px;
+  }
+  
+  .chart-canvas {
+    height: 320px;
+  }
+}
+
+/* Large screens - maximize chart space */
+@media (min-width: 1400px) {
+  body {
+    padding: 20px 15px;
+  }
+  
+  .charts-grid {
+    gap: 10px;
+  }
+  
+  .chart-canvas {
+    height: 400px;
+  }
 }
 
 /* Custom scrollbar */
