@@ -203,31 +203,21 @@ class ChartRenderer {
       const segments = [];
 
       supertrendData.forEach((point, index) => {
-        if (currentDirection === null) {
-          // First point
+        if (currentDirection === null || currentDirection !== point.direction) {
+          // Direction changed or first point
+          if (currentSegment.length > 0) {
+            // Save the previous segment
+            segments.push({
+              data: [...currentSegment],
+              direction: currentDirection
+            });
+            // Start new segment with connection point (last point of previous segment)
+            currentSegment = [currentSegment[currentSegment.length - 1]];
+          }
           currentDirection = point.direction;
-          currentSegment.push({ time: point.time, value: point.value });
-        } else if (currentDirection !== point.direction) {
-          // Direction changed - create vertical connection
-          // End previous segment at current time with old value
-          const lastValue = currentSegment[currentSegment.length - 1].value;
-          currentSegment.push({ time: point.time, value: lastValue });
-          
-          // Save the previous segment
-          segments.push({
-            data: [...currentSegment],
-            direction: currentDirection
-          });
-          
-          // Start new segment at SAME time with NEW value (creates vertical line)
-          currentSegment = [
-            { time: point.time, value: point.value }
-          ];
-          currentDirection = point.direction;
-        } else {
-          // Same direction, just add the point
-          currentSegment.push({ time: point.time, value: point.value });
         }
+        
+        currentSegment.push({ time: point.time, value: point.value });
         
         // If last point, save the segment
         if (index === supertrendData.length - 1 && currentSegment.length > 0) {
@@ -247,7 +237,7 @@ class ChartRenderer {
           color: color,
           lineWidth: 2,
           lineStyle: 0,
-          lineType: 1, // Step line (horizontal then vertical)
+          lineType: 1,
           crosshairMarkerVisible: true,
           lastValueVisible: false,
           priceLineVisible: false,
