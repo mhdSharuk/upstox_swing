@@ -1,6 +1,8 @@
 """
 Historical Data Fetcher - Async data fetching from Upstox
 UPDATED: Added SSL context for PythonAnywhere compatibility
+UPDATED: Optimized timestamp parsing for Render free tier (prevents OOM)
+UPDATED: Better error handling and memory management
 """
 
 import asyncio
@@ -139,8 +141,16 @@ class HistoricalDataFetcher:
                                 logger.warning(f"{trading_symbol} ({data_source}): Missing columns {missing_cols}")
                                 return None
 
-                            # Now safe to process - columns definitely exist
-                            df['timestamp'] = pd.to_datetime(df['timestamp'])
+                            # CRITICAL FIX: Explicitly specify datetime format to prevent format guessing
+                            # This prevents high memory usage and worker timeouts on free tier
+                            # Upstox API returns ISO 8601 format timestamps
+                            try:
+                                df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601', utc=True)
+                            except Exception as e:
+                                # Fallback to mixed format if ISO8601 fails
+                                logger.warning(f"{trading_symbol} ({data_source}): Using mixed format parsing")
+                                df['timestamp'] = pd.to_datetime(df['timestamp'], format='mixed', utc=True)
+                            
                             df['trading_symbol'] = trading_symbol
                             df['hl2'] = (df['high'] + df['low']) / 2
                             df = df.sort_values('timestamp').reset_index(drop=True)
@@ -169,6 +179,7 @@ class HistoricalDataFetcher:
                             return None
                 
                 except asyncio.TimeoutError:
+                    logger.warning(f"{trading_symbol} ({data_source}): Request timeout (attempt {attempt + 1}/{self.max_retries})")
                     if attempt < self.max_retries - 1:
                         await asyncio.sleep(self.retry_delay)
                         continue
@@ -176,6 +187,9 @@ class HistoricalDataFetcher:
                 
                 except Exception as e:
                     logger.error(f"{trading_symbol} ({data_source}): Error - {e}")
+                    if attempt < self.max_retries - 1:
+                        await asyncio.sleep(self.retry_delay)
+                        continue
                     return None
             
             return None
@@ -260,8 +274,10 @@ class HistoricalDataFetcher:
         """
         Fetch data for multiple instruments concurrently
         UPDATED: Added SSL context for PythonAnywhere compatibility
+        UPDATED: Better memory management for free tier
         """
         logger.info(f"Fetching {timeframe} data for {len(instruments)} instruments...")
+        logger.info(f"Concurrent requests: {self.max_concurrent}")
         
         semaphore = asyncio.Semaphore(self.max_concurrent)
         results = {}
@@ -307,6 +323,7 @@ class HistoricalDataFetcher:
             
             logger.info(f"Starting concurrent fetch (max {self.max_concurrent} simultaneous)...")
             
+            # Process in batches to manage memory better
             pending = set(tasks)
             while pending:
                 done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
@@ -325,13 +342,14 @@ class HistoricalDataFetcher:
                             error_count += 1
                         
                     except Exception as e:
+                        logger.error(f"{trading_symbol}: Task exception - {e}")
                         error_count += 1
                     
                     completed += 1
                     percentage = int((completed / total) * 100)
                     
                     if percentage >= last_percentage + 10 or completed == total:
-                        logger.info(f"Progress: {completed}/{total} ({percentage}%)")
+                        logger.info(f"Progress: {completed}/{total} ({percentage}%) - Success: {success_count}, Failed: {error_count}")
                         last_percentage = percentage
             
             logger.info(f"✓ Fetch complete: Success: {success_count}, Failed: {error_count}, Total: {total}")

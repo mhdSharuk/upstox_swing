@@ -3,6 +3,7 @@ Settings and configurations for the Upstox Supertrend Project
 Contains timeframe configs, indicator parameters, and API settings
 UPDATED: Supabase Storage configuration (Google Sheets/Drive removed)
 UPDATED: Added PythonAnywhere deployment configuration
+UPDATED: Optimized for Render free tier (512MB RAM limit)
 """
 
 # ==================== PYTHONANYWHERE CONFIGURATION ====================
@@ -19,7 +20,7 @@ API_CONFIG = {
     'intraday_endpoint': '/v3/historical-candle/intraday',
     'market_status_endpoint': '/v2/market/status',
     'instruments_url': 'https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz',
-    'rate_limit_delay': 0.1,
+    'rate_limit_delay': 0.15,  # Increased from 0.1 to reduce API load
     'max_retries': 3,
     'retry_delay': 2,
     'timeout': 30
@@ -110,10 +111,11 @@ SYMBOL_INFO_CONFIG = {
 }
 
 # ==================== ASYNC PROCESSING ====================
+# OPTIMIZED FOR RENDER FREE TIER (512MB RAM)
 ASYNC_CONFIG = {
-    'max_concurrent_requests': 3,
+    'max_concurrent_requests': 3,  # Reduced from 10 to prevent OOM on free tier
     'chunk_size': 50,
-    'semaphore_limit': 3
+    'semaphore_limit': 3  # Match concurrent requests
 }
 
 # ==================== LOGGING CONFIGURATION ====================
