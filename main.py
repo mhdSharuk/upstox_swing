@@ -32,8 +32,8 @@ from auth.token_manager import TokenManager
 from auth.upstox_auth import UpstoxAuthenticator
 from data_fetcher.instrument_mapper import InstrumentMapper
 from data_fetcher.historical_data import HistoricalDataFetcher
-from indicators.supertrend import SupertrendCalculator
-from indicators.flat_base import FlatBaseDetector
+from indicators.supertrend_numba import SupertrendCalculator
+from indicators.flat_base_numba import FlatBaseDetector
 from indicators.percentage_calculator import PercentageCalculator
 from indicators.symbol_info_merger import SymbolInfoMerger
 from storage.supabase_storage import SupabaseStorage

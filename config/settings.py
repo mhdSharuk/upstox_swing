@@ -79,8 +79,8 @@ SUPERTREND_CONFIGS_DAILY = [
 
 # ==================== DATA RETENTION SETTINGS ====================
 PARQUET_RETENTION = {
-    '125min': 200,
-    'daily': 200
+    '125min': 60,
+    'daily': 60
 }
 
 # ==================== SUPABASE CONFIGURATION ====================
