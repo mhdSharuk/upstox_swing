@@ -111,9 +111,9 @@ SYMBOL_INFO_CONFIG = {
 
 # ==================== ASYNC PROCESSING ====================
 ASYNC_CONFIG = {
-    'max_concurrent_requests': 40,
+    'max_concurrent_requests': 10,
     'chunk_size': 50,
-    'semaphore_limit': 40
+    'semaphore_limit': 10
 }
 
 # ==================== LOGGING CONFIGURATION ====================
