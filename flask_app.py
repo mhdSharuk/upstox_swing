@@ -387,13 +387,14 @@ def run_job_async():
         sys.stdout.flush()
         job_status['progress'] = {'stage': 'instruments', 'details': 'Fetching instrument mappings'}
         
+        # FIXED: Changed fetch_symbol_info() to load_symbol_info()
         symbol_merger = SymbolInfoMerger()
-        if not symbol_merger.fetch_symbol_info():
-            raise Exception("Failed to fetch symbol info")
+        if not symbol_merger.load_symbol_info():
+            raise Exception("Failed to load symbol info")
         
         min_mcap = INSTRUMENT_FILTERS.get('min_market_cap', 5000)
         symbol_df = symbol_merger.symbol_info_df
-        filtered_df = symbol_df[symbol_df['market_cap'] >= min_mcap].head()
+        filtered_df = symbol_df[symbol_df['market_cap'] >= min_mcap].head(50)
         allowed_symbols = set(filtered_df['trading_symbol'].tolist())
         
         mapper = InstrumentMapper(access_token)
@@ -429,6 +430,7 @@ def run_job_async():
         sys.stdout.flush()
         job_status['progress'] = {'stage': 'indicators', 'details': 'Calculating indicators'}
         
+        # FIXED: Changed calculate_all_instruments() to calculate_with_state_preservation()[0]
         calculated_data = {}
         for timeframe, instruments_data in historical_data.items():
             if timeframe == '125min':
@@ -436,8 +438,13 @@ def run_job_async():
             else:
                 configs = SUPERTREND_CONFIGS_DAILY
             
-            calculator = SupertrendCalculator(configs)
-            calculated_data[timeframe] = calculator.calculate_all_instruments(instruments_data)
+            calculator = SupertrendCalculator()
+            # Returns tuple (calculated_dataframes, state_variables), we need [0]
+            calculated_data[timeframe] = calculator.calculate_with_state_preservation(
+                instruments_data, 
+                configs, 
+                timeframe
+            )[0]
         
         logger.info("✅ Indicators calculated")
         sys.stdout.flush()
@@ -447,10 +454,20 @@ def run_job_async():
         sys.stdout.flush()
         job_status['progress'] = {'stage': 'percentages', 'details': 'Calculating percentages'}
         
+        # FIXED: Changed calculate_percentages() to process_timeframe_data()
         perc_calc = PercentageCalculator()
         with_percentages = {}
         for timeframe, data in calculated_data.items():
-            with_percentages[timeframe] = perc_calc.calculate_percentages(data)
+            if timeframe == '125min':
+                configs = SUPERTREND_CONFIGS_125M
+            else:
+                configs = SUPERTREND_CONFIGS_DAILY
+            
+            with_percentages[timeframe] = perc_calc.process_timeframe_data(
+                data, 
+                configs, 
+                timeframe
+            )
         
         logger.info("✅ Percentages calculated")
         sys.stdout.flush()
@@ -460,9 +477,10 @@ def run_job_async():
         sys.stdout.flush()
         job_status['progress'] = {'stage': 'merging', 'details': 'Merging symbol information'}
         
+        # FIXED: Changed merge_symbol_info(data) to merge_with_data(data, timeframe)
         final_data = {}
         for timeframe, data in with_percentages.items():
-            final_data[timeframe] = symbol_merger.merge_symbol_info(data)
+            final_data[timeframe] = symbol_merger.merge_with_data(data, timeframe)
         
         logger.info("✅ Symbol info merged")
         sys.stdout.flush()
@@ -472,11 +490,12 @@ def run_job_async():
         sys.stdout.flush()
         job_status['progress'] = {'stage': 'uploading', 'details': 'Uploading to Supabase'}
         
+        # FIXED: Changed upload_dataframe() to upload_parquet()
         upload_results = {}
         for timeframe, data in final_data.items():
             logger.info(f"  Uploading {timeframe} data ({len(data)} rows)...")
             sys.stdout.flush()
-            result = supabase_storage.upload_dataframe(data, timeframe)
+            result = supabase_storage.upload_parquet(data, timeframe)
             upload_results[timeframe] = result
             logger.info(f"  ✅ {timeframe} uploaded: {result}")
             sys.stdout.flush()
