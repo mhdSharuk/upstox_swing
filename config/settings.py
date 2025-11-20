@@ -79,8 +79,8 @@ SUPERTREND_CONFIGS_DAILY = [
 
 # ==================== DATA RETENTION SETTINGS ====================
 PARQUET_RETENTION = {
-    '125min': 400,
-    'daily': 400
+    '125min': 200,
+    'daily': 200
 }
 
 # ==================== SUPABASE CONFIGURATION ====================
@@ -113,9 +113,9 @@ SYMBOL_INFO_CONFIG = {
 # ==================== ASYNC PROCESSING ====================
 # OPTIMIZED FOR RENDER FREE TIER (512MB RAM)
 ASYNC_CONFIG = {
-    'max_concurrent_requests': 3,  # Reduced from 10 to prevent OOM on free tier
+    'max_concurrent_requests': 40,  # Reduced from 10 to prevent OOM on free tier
     'chunk_size': 50,
-    'semaphore_limit': 3  # Match concurrent requests
+    'semaphore_limit': 40  # Match concurrent requests
 }
 
 # ==================== LOGGING CONFIGURATION ====================

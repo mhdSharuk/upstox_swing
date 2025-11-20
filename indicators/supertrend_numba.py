@@ -375,10 +375,11 @@ class SupertrendCalculator:
         # Use parallel processing for larger datasets
         if max_workers is None:
             max_workers = max(1, cpu_count() - 1)  # Leave one core free
-        
+        logger.info(f'Number of CPU counts available : {max_workers}')   
+         
         # Cap workers at reasonable maximum
         max_workers = min(max_workers, num_symbols, 16)
-        
+    
         logger.info(f"Calculating supertrends for {num_symbols} symbols using {max_workers} parallel workers (Numba-optimized)...")
         
         return self._calculate_parallel(df_by_symbol, configs, timeframe, max_workers)
