@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signal Tracker</title>
+  
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>📊 Signal Tracker</h1>
+      <button class="theme-toggle" onclick="toggleTheme()">
+        <span id="theme-icon">🌙</span>
+        <span id="theme-text">Dark Mode</span>
+      </button>
+    </div>
+    
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('daily')">Daily Signals</button>
+      <button class="tab" onclick="switchTab('125min')">125min Signals</button>
+      <button class="tab" onclick="switchTab('charts')">Charts</button>
+      <button class="tab" onclick="switchTab('symbols')">Symbols</button>
+      <button class="tab" onclick="switchTab('watchlist')">Watchlist</button>
+    </div>
+    
+    <!-- Daily Signals Tab -->
+    <div id="daily-tab" class="tab-content active">
+      <div class="filters">
+        <h3>Filters</h3>
+        <div class="filter-grid">
+          <div class="filter-item">
+            <label>Supertrend</label>
+            <select id="daily-supertrend" onchange="loadDailySignals()"></select>
+          </div>
+          <div class="filter-item">
+            <label>Sector</label>
+            <select id="daily-sector" onchange="loadDailySignals()">
+              <option value="All">All</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>Industry</label>
+            <select id="daily-industry" onchange="loadDailySignals()">
+              <option value="All">All</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>Market Cap ≥</label>
+            <input type="number" id="daily-mcap" value="10000" onchange="loadDailySignals()">
+          </div>
+          <div class="filter-item">
+            <label>Pct Diff ≤</label>
+            <input type="number" id="daily-pct" value="2.5" step="0.1" onchange="loadDailySignals()">
+          </div>
+          <div class="filter-item">
+            <label>Flatbase ≥</label>
+            <input type="number" id="daily-flat" value="3" onchange="loadDailySignals()">
+          </div>
+        </div>
+        <div style="margin-top: 15px; display: flex; align-items: center;">
+          <button class="refresh-btn" id="daily-refresh-btn" onclick="loadDailySignals(true)">🔄 Refresh</button>
+          <span id="daily-last-updated" class="last-updated"></span>
+        </div>
+      </div>
+      
+      <div id="daily-loading" class="loading">
+        <div class="spinner"></div>
+        Loading signals...
+      </div>
+      
+      <div id="daily-content" style="display: none;">
+        <div class="tables-container">
+          <div class="signal-table">
+            <div class="table-header long">
+              <span>Long Signals</span>
+              <span id="daily-long-count">0</span>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="checkbox-cell">Add</th>
+                    <th>Symbol</th>
+                    <th>Close</th>
+                    <th>LTP %</th>
+                    <th>Pct Diff</th>
+                    <th>Flatbase</th>
+                  </tr>
+                </thead>
+                <tbody id="daily-long-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          
+          <div class="signal-table">
+            <div class="table-header short">
+              <span>Short Signals</span>
+              <span id="daily-short-count">0</span>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="checkbox-cell">Add</th>
+                    <th>Symbol</th>
+                    <th>Close</th>
+                    <th>LTP %</th>
+                    <th>Pct Diff</th>
+                    <th>Flatbase</th>
+                  </tr>
+                </thead>
+                <tbody id="daily-short-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 125min Signals Tab -->
+    <div id="125min-tab" class="tab-content">
+      <div class="filters">
+        <h3>Filters</h3>
+        <div class="filter-grid">
+          <div class="filter-item">
+            <label>Supertrend</label>
+            <select id="min125-supertrend" onchange="load125minSignals()"></select>
+          </div>
+          <div class="filter-item">
+            <label>Sector</label>
+            <select id="min125-sector" onchange="load125minSignals()">
+              <option value="All">All</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>Industry</label>
+            <select id="min125-industry" onchange="load125minSignals()">
+              <option value="All">All</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>Market Cap ≥</label>
+            <input type="number" id="min125-mcap" value="10000" onchange="load125minSignals()">
+          </div>
+          <div class="filter-item">
+            <label>Pct Diff ≤</label>
+            <input type="number" id="min125-pct" value="2.5" step="0.1" onchange="load125minSignals()">
+          </div>
+          <div class="filter-item">
+            <label>Flatbase ≥</label>
+            <input type="number" id="min125-flat" value="3" onchange="load125minSignals()">
+          </div>
+        </div>
+        <div style="margin-top: 15px; display: flex; align-items: center;">
+          <button class="refresh-btn" id="min125-refresh-btn" onclick="load125minSignals(true)">🔄 Refresh</button>
+          <span id="min125-last-updated" class="last-updated"></span>
+        </div>
+      </div>
+      
+      <div id="min125-loading" class="loading">
+        <div class="spinner"></div>
+        Loading signals...
+      </div>
+      
+      <div id="min125-content" style="display: none;">
+        <div class="tables-container">
+          <div class="signal-table">
+            <div class="table-header long">
+              <span>Long Signals</span>
+              <span id="min125-long-count">0</span>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="checkbox-cell">Add</th>
+                    <th>Symbol</th>
+                    <th>Close</th>
+                    <th>LTP %</th>
+                    <th>Pct Diff</th>
+                    <th>Flatbase</th>
+                  </tr>
+                </thead>
+                <tbody id="min125-long-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          
+          <div class="signal-table">
+            <div class="table-header short">
+              <span>Short Signals</span>
+              <span id="min125-short-count">0</span>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="checkbox-cell">Add</th>
+                    <th>Symbol</th>
+                    <th>Close</th>
+                    <th>LTP %</th>
+                    <th>Pct Diff</th>
+                    <th>Flatbase</th>
+                  </tr>
+                </thead>
+                <tbody id="min125-short-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Charts Tab - UPDATED: Added Sector, Industry, Market Cap filters -->
+    <div id="charts-tab" class="tab-content">
+      <div class="filters">
+        <h3>Chart Filters</h3>
+        <div class="filter-grid">
+          <div class="filter-item">
+            <label>Data</label>
+            <select id="charts-data" onchange="onChartDataChange()">
+              <option value="daily">Daily</option>
+              <option value="min125">125min</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>Type</label>
+            <select id="charts-type" onchange="loadCharts()">
+              <option value="Long">Long</option>
+              <option value="Short">Short</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>Supertrend</label>
+            <select id="charts-supertrend" onchange="loadCharts()"></select>
+          </div>
+          <div class="filter-item">
+            <label>Sector</label>
+            <select id="charts-sector" onchange="loadCharts()">
+              <option value="All">All</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>Industry</label>
+            <select id="charts-industry" onchange="loadCharts()">
+              <option value="All">All</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>Market Cap ≥</label>
+            <input type="number" id="charts-mcap" value="10000" onchange="loadCharts()">
+          </div>
+          <div class="filter-item">
+            <label>Pct Diff ≤</label>
+            <input type="number" id="charts-pct" value="2.5" step="0.1" onchange="loadCharts()">
+          </div>
+          <div class="filter-item">
+            <label>Flatbase ≥</label>
+            <input type="number" id="charts-flat" value="3" onchange="loadCharts()">
+          </div>
+        </div>
+      </div>
+      
+      <div id="charts-loading" class="loading">
+        <div class="spinner"></div>
+        Loading charts...
+      </div>
+      
+      <div id="charts-content" style="display: none;">
+        <div id="charts-grid" class="charts-grid"></div>
+      </div>
+    </div>
+    
+    <!-- Symbols Tab -->
+    <div id="symbols-tab" class="tab-content">
+      <div class="filters">
+        <h3>Symbol Chart Viewer</h3>
+        <div class="filter-grid">
+          <div class="filter-item">
+            <label>Timeframe</label>
+            <select id="symbols-timeframe" onchange="onSymbolTimeframeChange()">
+              <option value="daily">Daily</option>
+              <option value="min125">125min</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>Supertrend</label>
+            <select id="symbols-supertrend" onchange="loadSymbolChart()"></select>
+          </div>
+          <div class="filter-item" style="grid-column: span 2;">
+            <label>Select Symbol</label>
+            <select id="symbols-select" onchange="loadSymbolChart()">
+              <option value="">-- Select a symbol --</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      <div id="symbols-loading" class="loading" style="display: none;">
+        <div class="spinner"></div>
+        Loading chart...
+      </div>
+      
+      <div id="symbols-content" style="display: none;">
+        <div class="chart-container" style="max-width: 100%; margin: 20px 0;">
+          <div class="chart-header">
+            <span class="chart-symbol" id="symbols-chart-title">Select a symbol</span>
+            <span class="chart-type-badge" id="symbols-chart-badge" style="display: none;"></span>
+          </div>
+          <div class="chart-canvas" id="symbols-chart" style="height: 500px;"></div>
+        </div>
+      </div>
+      
+      <div id="symbols-empty" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+        Select a symbol to view its chart
+      </div>
+    </div>
+    
+    <!-- Watchlist Tab -->
+    <div id="watchlist-tab" class="tab-content">
+      <div class="watchlist-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h2>📌 Watchlist</h2>
+          <div>
+            <button class="refresh-btn" id="watchlist-refresh-btn" onclick="loadWatchlist()">🔄 Refresh</button>
+            <span id="watchlist-last-updated" class="last-updated"></span>
+          </div>
+        </div>
+        
+        <div id="watchlist-loading" class="loading">
+          <div class="spinner"></div>
+          Loading watchlist...
+        </div>
+        
+        <div id="watchlist-content" style="display: none;">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th class="checkbox-cell">Remove</th>
+                  <th>Symbol</th>
+                  <th>Sheet</th>
+                  <th>Supertrend</th>
+                  <th>Type</th>
+                  <th>Pct Diff</th>
+                  <th>Flatbase</th>
+                  <th>Date Added</th>
+                </tr>
+              </thead>
+              <tbody id="watchlist-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- External Libraries -->
+  <!-- TradingView Lightweight Charts -->
+  <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+
+  <!-- Application Scripts (LOAD IN ORDER) -->
+  <script src="js/config.js"></script>
+  <script src="js/dataLoader.js"></script>
+  <script src="js/filters.js"></script>
+  <script src="js/chartRenderer.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 """
 Token Manager - Handle Upstox access token validation and management
-UPDATED: Added webhook token saving for automated token refresh
+UPDATED: Added Supabase storage support for production deployment
 """
 
 import json
@@ -15,28 +15,43 @@ logger = get_logger(__name__)
 
 class TokenManager:
     """
-    Manage Upstox access tokens - validate, load, refresh, and save from webhook
+    Manage Upstox access tokens - validate, load, refresh, and save
+    Supports both local file storage and Supabase cloud storage
     """
     
-    def __init__(self, token_file: str = "upstox_token.json"):
+    def __init__(self, token_file: str = "credentials/upstox_token.json", use_supabase: bool = False, supabase_storage=None):
         """
         Initialize Token Manager
         
         Args:
-            token_file: Path to the token JSON file
+            token_file: Path to the token JSON file (for local storage)
+            use_supabase: Whether to use Supabase for token storage
+            supabase_storage: SupabaseStorage instance (required if use_supabase=True)
         """
         self.token_file = token_file
+        self.use_supabase = use_supabase
+        self.supabase_storage = supabase_storage
         self.access_token: Optional[str] = None
         self.user_info: Dict = {}
         self.token_timestamp: Optional[str] = None
+        
+        if self.use_supabase and not self.supabase_storage:
+            raise ValueError("supabase_storage is required when use_supabase=True")
     
     def load_token(self) -> bool:
         """
-        Load access token from file
+        Load access token from storage (file or Supabase)
         
         Returns:
             bool: True if token loaded successfully, False otherwise
         """
+        if self.use_supabase:
+            return self._load_token_from_supabase()
+        else:
+            return self._load_token_from_file()
+    
+    def _load_token_from_file(self) -> bool:
+        """Load token from local file"""
         if not os.path.exists(self.token_file):
             logger.error(f"Token file '{self.token_file}' not found!")
             logger.info("Please run the login script first to authenticate")
@@ -54,7 +69,7 @@ class TokenManager:
                 logger.error("No access token found in file!")
                 return False
             
-            logger.info("Token loaded successfully")
+            logger.info("Token loaded successfully from file")
             logger.info(f"User: {self.user_info.get('user_name')} ({self.user_info.get('user_id')})")
             logger.info(f"Token saved at: {self.token_timestamp}")
             
@@ -64,7 +79,36 @@ class TokenManager:
             logger.error("Error reading token file - file may be corrupted")
             return False
         except Exception as e:
-            logger.error(f"Error loading token: {e}")
+            logger.error(f"Error loading token from file: {e}")
+            return False
+    
+    def _load_token_from_supabase(self) -> bool:
+        """Load token from Supabase Storage"""
+        try:
+            logger.info("Loading token from Supabase Storage...")
+            
+            success, token_data, message = self.supabase_storage.download_token()
+            
+            if not success or not token_data:
+                logger.error(f"Failed to load token from Supabase: {message}")
+                return False
+            
+            self.access_token = token_data.get("access_token")
+            self.user_info = token_data.get("user_info", {})
+            self.token_timestamp = token_data.get("timestamp")
+            
+            if not self.access_token:
+                logger.error("No access token found in Supabase!")
+                return False
+            
+            logger.info("Token loaded successfully from Supabase")
+            logger.info(f"User: {self.user_info.get('user_name')} ({self.user_info.get('user_id')})")
+            logger.info(f"Token saved at: {self.token_timestamp}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error loading token from Supabase: {e}")
             return False
     
     def validate_token(self) -> bool:
@@ -163,7 +207,7 @@ class TokenManager:
         """
         # Try to load token
         if not self.load_token():
-            return False, "Failed to load token. Please run login script."
+            return False, "Failed to load token. Please authenticate."
         
         # Check if likely expired based on time
         if self.is_token_likely_expired():
@@ -174,11 +218,11 @@ class TokenManager:
         if self.validate_token():
             return True, "Token is valid and ready to use"
         else:
-            return False, "Token is invalid or expired. Please run login script to re-authenticate."
+            return False, "Token is invalid or expired. Please re-authenticate."
     
     def save_token(self, access_token: str, user_info: Dict) -> bool:
         """
-        Save a new access token to file
+        Save a new access token to storage (file or Supabase)
         
         Args:
             access_token: The access token to save
@@ -194,75 +238,52 @@ class TokenManager:
             "expires_note": "Token expires at 3:30 AM IST next day"
         }
         
+        if self.use_supabase:
+            return self._save_token_to_supabase(token_data)
+        else:
+            return self._save_token_to_file(token_data)
+    
+    def _save_token_to_file(self, token_data: Dict) -> bool:
+        """Save token to local file"""
         try:
+            # Ensure credentials directory exists
+            token_dir = os.path.dirname(self.token_file)
+            if token_dir:
+                os.makedirs(token_dir, exist_ok=True)
+            
             with open(self.token_file, 'w') as f:
                 json.dump(token_data, f, indent=4)
             
-            self.access_token = access_token
-            self.user_info = user_info
+            self.access_token = token_data["access_token"]
+            self.user_info = token_data["user_info"]
             self.token_timestamp = token_data["timestamp"]
             
             logger.info(f"Token saved successfully to {self.token_file}")
             return True
             
         except Exception as e:
-            logger.error(f"Error saving token: {e}")
+            logger.error(f"Error saving token to file: {e}")
             return False
     
-    def save_token_from_webhook(self, webhook_data: Dict) -> bool:
-        """
-        Save token received from Upstox webhook callback
-        This is called by the Flask webhook endpoint
-        
-        Args:
-            webhook_data: Dictionary containing webhook payload from Upstox
-                Expected keys:
-                - access_token: The access token string
-                - user_id: User ID
-                - issued_at: Token issued timestamp
-                - expires_at: Token expiry timestamp
-                - message_type: Should be 'access_token'
-        
-        Returns:
-            bool: True if token saved successfully
-        """
+    def _save_token_to_supabase(self, token_data: Dict) -> bool:
+        """Save token to Supabase Storage"""
         try:
-            # Validate webhook data
-            if webhook_data.get('message_type') != 'access_token':
-                logger.error(f"Invalid message type: {webhook_data.get('message_type')}")
-                return False
+            logger.info("Saving token to Supabase Storage...")
             
-            access_token = webhook_data.get('access_token')
-            if not access_token:
-                logger.error("No access token in webhook data")
-                return False
-            
-            # Extract user info from webhook
-            user_info = {
-                'user_id': webhook_data.get('user_id', ''),
-                'user_name': webhook_data.get('user_id', ''),  # Webhook doesn't provide full name
-                'email': '',  # Webhook doesn't provide email
-                'issued_at': webhook_data.get('issued_at', ''),
-                'expires_at': webhook_data.get('expires_at', '')
-            }
-            
-            # Save using existing save_token method
-            success = self.save_token(access_token, user_info)
+            success, message = self.supabase_storage.upload_token(token_data)
             
             if success:
-                logger.info("=" * 60)
-                logger.info("✓ TOKEN SAVED FROM WEBHOOK!")
-                logger.info("=" * 60)
-                logger.info(f"User ID: {user_info['user_id']}")
-                logger.info(f"Issued at: {user_info['issued_at']}")
-                logger.info(f"Expires at: {user_info['expires_at']}")
-                logger.info(f"Saved to: {self.token_file}")
-                logger.info("=" * 60)
-            
-            return success
+                self.access_token = token_data["access_token"]
+                self.user_info = token_data["user_info"]
+                self.token_timestamp = token_data["timestamp"]
+                logger.info("Token saved successfully to Supabase")
+                return True
+            else:
+                logger.error(f"Failed to save token to Supabase: {message}")
+                return False
             
         except Exception as e:
-            logger.error(f"Error saving token from webhook: {e}")
+            logger.error(f"Error saving token to Supabase: {e}")
             return False
     
     def get_token_info(self) -> Dict:
@@ -273,9 +294,16 @@ class TokenManager:
         Returns:
             dict: Token information including validity status
         """
+        if self.use_supabase:
+            exists, _ = self.supabase_storage.check_token_exists()
+            storage_location = "Supabase Storage"
+        else:
+            exists = os.path.exists(self.token_file)
+            storage_location = self.token_file
+        
         info = {
-            'token_file': self.token_file,
-            'token_exists': os.path.exists(self.token_file),
+            'storage_location': storage_location,
+            'token_exists': exists,
             'token_loaded': self.access_token is not None,
             'token_timestamp': self.token_timestamp,
             'user_id': self.user_info.get('user_id', 'N/A'),

@@ -1,8 +1,8 @@
 """
 Storage package for data persistence
+UPDATED: Supabase Storage only (Google removed)
 """
 
-from .sheets_writer import GoogleSheetsWriter
-from .gdrive_handler import GoogleDriveHandler
+from .supabase_storage import SupabaseStorage
 
-__all__ = ['GoogleSheetsWriter', 'GoogleDriveHandler']
+__all__ = ['SupabaseStorage']

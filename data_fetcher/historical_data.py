@@ -194,6 +194,7 @@ class HistoricalDataFetcher:
         semaphore: asyncio.Semaphore,
         market_is_open: bool
     ) -> Optional[pd.DataFrame]:
+        # Fetch historical data
         historical_df = await self.fetch_candle_data(
             session,
             instrument_key,
@@ -203,17 +204,17 @@ class HistoricalDataFetcher:
             is_intraday=False
         )
         
-        intraday_df = None
-        if market_is_open:
-            intraday_df = await self.fetch_candle_data(
-                session,
-                instrument_key,
-                trading_symbol,
-                timeframe,
-                semaphore,
-                is_intraday=True
-            )
+        # MODIFIED: Always fetch intraday data regardless of market hours
+        intraday_df = await self.fetch_candle_data(
+            session,
+            instrument_key,
+            trading_symbol,
+            timeframe,
+            semaphore,
+            is_intraday=True
+        )
         
+        # Combine both datasets
         combined_df = self._combine_historical_and_intraday(
             historical_df,
             intraday_df,
@@ -236,10 +237,11 @@ class HistoricalDataFetcher:
             logger.info("Checking NSE market status...")
             market_is_open = await self.check_market_status(session)
             
+            # MODIFIED: Always fetch both historical and intraday data
             if market_is_open:
                 logger.info("Market is OPEN - fetching historical + intraday data")
             else:
-                logger.info("Market is CLOSED - fetching only historical data")
+                logger.info("Market is CLOSED - still fetching historical + intraday data")
             
             tasks = []
             symbols = []
