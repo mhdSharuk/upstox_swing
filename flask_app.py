@@ -2,6 +2,7 @@
 Flask App for Upstox Supertrend - Render Deployment
 Handles OAuth authentication, token management via Supabase, and cron job execution
 UPDATED: Background threading with real-time logging for long-running jobs
+CORRECTED: All method names verified against actual class implementations
 IMPORTANT: Uses NON-NUMBA indicator versions for compatibility
 """
 
@@ -347,6 +348,7 @@ def run_job_async():
     """
     Background job function - runs the complete pipeline
     Logs are flushed immediately for real-time visibility
+    ALL METHOD NAMES VERIFIED AGAINST ACTUAL IMPLEMENTATIONS
     """
     global job_status
     
@@ -388,8 +390,10 @@ def run_job_async():
         job_status['progress'] = {'stage': 'instruments', 'details': 'Fetching instrument mappings'}
         
         symbol_merger = SymbolInfoMerger()
-        if not symbol_merger.fetch_symbol_info():
-            raise Exception("Failed to fetch symbol info")
+        
+        # CORRECTED: Use load_symbol_info() not fetch_symbol_info()
+        if not symbol_merger.load_symbol_info():
+            raise Exception("Failed to load symbol info CSV")
         
         min_mcap = INSTRUMENT_FILTERS.get('min_market_cap', 5000)
         symbol_df = symbol_merger.symbol_info_df
@@ -407,6 +411,7 @@ def run_job_async():
         
         # Step 3: Fetch historical data
         logger.info(f"📋 Stage 3/7: Fetching data for {len(instruments_dict)} instruments...")
+        logger.info("   This will take 15-25 minutes... (longest stage)")
         sys.stdout.flush()
         job_status['progress'] = {
             'stage': 'fetching_data', 
@@ -460,9 +465,13 @@ def run_job_async():
         sys.stdout.flush()
         job_status['progress'] = {'stage': 'merging', 'details': 'Merging symbol information'}
         
-        final_data = {}
-        for timeframe, data in with_percentages.items():
-            final_data[timeframe] = symbol_merger.merge_symbol_info(data)
+        # CORRECTED: Use merge_all_timeframes() which internally calls load_symbol_info()
+        # Symbol info already loaded in Step 2, so just create new instance and merge
+        final_symbol_merger = SymbolInfoMerger()
+        final_data = final_symbol_merger.merge_all_timeframes(with_percentages)
+        
+        if not final_data:
+            raise Exception("Failed to merge symbol info")
         
         logger.info("✅ Symbol info merged")
         sys.stdout.flush()
@@ -472,14 +481,14 @@ def run_job_async():
         sys.stdout.flush()
         job_status['progress'] = {'stage': 'uploading', 'details': 'Uploading to Supabase'}
         
-        upload_results = {}
-        for timeframe, data in final_data.items():
-            logger.info(f"  Uploading {timeframe} data ({len(data)} rows)...")
-            sys.stdout.flush()
-            result = supabase_storage.upload_dataframe(data, timeframe)
-            upload_results[timeframe] = result
-            logger.info(f"  ✅ {timeframe} uploaded: {result}")
-            sys.stdout.flush()
+        # CORRECTED: Use upload_all_timeframes() which internally calls upload_parquet()
+        success = supabase_storage.upload_all_timeframes(final_data)
+        
+        if not success:
+            raise Exception("Failed to upload parquet files to Supabase")
+        
+        logger.info("✅ Upload completed")
+        sys.stdout.flush()
         
         # Success
         job_status['running'] = False
@@ -487,12 +496,15 @@ def run_job_async():
         job_status['last_status'] = 'success'
         job_status['progress'] = {
             'stage': 'completed',
-            'upload_results': upload_results,
-            'instruments_processed': len(instruments_dict)
+            'instruments_processed': len(instruments_dict),
+            'timeframes': list(final_data.keys())
         }
         
         logger.info("=" * 60)
         logger.info("🎉 ASYNC JOB COMPLETED SUCCESSFULLY")
+        logger.info("=" * 60)
+        logger.info(f"Total instruments processed: {len(instruments_dict)}")
+        logger.info(f"Timeframes: {list(final_data.keys())}")
         logger.info("=" * 60)
         sys.stdout.flush()
         
@@ -539,7 +551,7 @@ def run_job():
     thread = threading.Thread(target=run_job_async, daemon=True)
     thread.start()
     
-    logger.info("Job thread started - check logs for progress")
+    logger.info("Background job thread started - check logs for real-time progress")
     sys.stdout.flush()
     
     return jsonify({
