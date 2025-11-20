@@ -1,5 +1,12 @@
+"""
+Historical Data Fetcher - Async data fetching from Upstox
+UPDATED: Added SSL context for PythonAnywhere compatibility
+"""
+
 import asyncio
 import aiohttp
+import ssl
+import certifi
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
@@ -25,6 +32,7 @@ class HistoricalDataFetcher:
         self.ist_tz = pytz.timezone('Asia/Kolkata')
     
     async def check_market_status(self, session: aiohttp.ClientSession) -> bool:
+        """Check if NSE market is currently open"""
         url = f"{self.base_url}{self.market_status_endpoint}/NSE"
         headers = {
             "Accept": "application/json",
@@ -56,6 +64,7 @@ class HistoricalDataFetcher:
             return False
     
     def _get_date_range(self, timeframe: str) -> Tuple[str, str]:
+        """Calculate date range for historical data fetch"""
         to_date = datetime.now()
         to_date_str = to_date.strftime('%Y-%m-%d')
         
@@ -76,6 +85,7 @@ class HistoricalDataFetcher:
         semaphore: asyncio.Semaphore,
         is_intraday: bool = False
     ) -> Optional[pd.DataFrame]:
+        """Fetch candle data for a single instrument"""
         async with semaphore:
             config = TIMEFRAME_CONFIG.get(timeframe, {})
             unit = config['unit']
@@ -159,6 +169,7 @@ class HistoricalDataFetcher:
         intraday_df: Optional[pd.DataFrame],
         trading_symbol: str
     ) -> Optional[pd.DataFrame]:
+        """Combine historical and intraday data, removing duplicates"""
         if historical_df is not None and intraday_df is None:
             return historical_df
         
@@ -194,6 +205,7 @@ class HistoricalDataFetcher:
         semaphore: asyncio.Semaphore,
         market_is_open: bool
     ) -> Optional[pd.DataFrame]:
+        """Fetch both historical and intraday data for an instrument"""
         # Fetch historical data
         historical_df = await self.fetch_candle_data(
             session,
@@ -228,12 +240,23 @@ class HistoricalDataFetcher:
         instruments: Dict[str, str],
         timeframe: str
     ) -> Dict[str, pd.DataFrame]:
+        """
+        Fetch data for multiple instruments concurrently
+        UPDATED: Added SSL context for PythonAnywhere compatibility
+        """
         logger.info(f"Fetching {timeframe} data for {len(instruments)} instruments...")
         
         semaphore = asyncio.Semaphore(self.max_concurrent)
         results = {}
         
-        async with aiohttp.ClientSession() as session:
+        # Create SSL context with certifi for PythonAnywhere compatibility
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        
+        # Create connector with SSL context
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        
+        # Create session with the connector
+        async with aiohttp.ClientSession(connector=connector) as session:
             logger.info("Checking NSE market status...")
             market_is_open = await self.check_market_status(session)
             
@@ -303,6 +326,7 @@ class HistoricalDataFetcher:
         instruments: Dict[str, str],
         timeframes: List[str]
     ) -> Dict[str, Dict[str, pd.DataFrame]]:
+        """Fetch data for all instruments across multiple timeframes"""
         logger.info("=" * 60)
         logger.info("FETCHING HISTORICAL & INTRADAY DATA")
         logger.info("=" * 60)
@@ -345,6 +369,7 @@ class HistoricalDataFetcher:
         self,
         data_by_timeframe: Dict[str, Dict[str, pd.DataFrame]]
     ) -> Dict[str, pd.DataFrame]:
+        """Combine all instruments data for each timeframe"""
         combined = {}
         
         for timeframe, instruments_data in data_by_timeframe.items():
