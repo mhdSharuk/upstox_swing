@@ -394,7 +394,7 @@ def run_job_async():
         
         min_mcap = INSTRUMENT_FILTERS.get('min_market_cap', 5000)
         symbol_df = symbol_merger.symbol_info_df
-        filtered_df = symbol_df[symbol_df['market_cap'] >= min_mcap].head(50)
+        filtered_df = symbol_df[symbol_df['market_cap'] >= min_mcap]#.head(50)
         allowed_symbols = set(filtered_df['trading_symbol'].tolist())
         
         mapper = InstrumentMapper(access_token)
