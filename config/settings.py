@@ -2,7 +2,15 @@
 Settings and configurations for the Upstox Supertrend Project
 Contains timeframe configs, indicator parameters, and API settings
 UPDATED: Supabase Storage configuration (Google Sheets/Drive removed)
+UPDATED: Added PythonAnywhere deployment configuration
 """
+
+# ==================== PYTHONANYWHERE CONFIGURATION ====================
+PYTHONANYWHERE_CONFIG = {
+    'username': 'mhdsharuk',
+    'base_url': 'https://mhdsharuk.pythonanywhere.com',
+    'redirect_uri': 'https://mhdsharuk.pythonanywhere.com/callback',
+}
 
 # ==================== UPSTOX API CONFIGURATION ====================
 API_CONFIG = {
@@ -66,20 +74,6 @@ SUPERTREND_CONFIGS_DAILY = [
         'atr_multiplier': 2.0,
         'description': 'Monthly reference with SMA (~20 trading days/month)'
     },
-    # {
-    #     'name': 'ST_daily_hl2_20',
-    #     'use_sma': False,
-    #     'atr_period': 20,
-    #     'atr_multiplier': 2.0,
-    #     'description': 'Monthly reference without SMA'
-    # },
-    # {
-    #     'name': 'ST_daily_hl2_5',
-    #     'use_sma': False,
-    #     'atr_period': 5,
-    #     'atr_multiplier': 2.0,
-    #     'description': 'Weekly reference without SMA'
-    # }
 ]
 
 # ==================== DATA RETENTION SETTINGS ====================

@@ -1,11 +1,13 @@
 """
 Supabase Storage Handler for uploading parquet files
 Uses Supabase Storage API to store historical market data
+UPDATED: Added token management methods for Upstox access token
 """
 
 import io
+import json
 import pandas as pd
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 from supabase import create_client, Client
 from utils.logger import get_logger
 from config.settings import SUPABASE_CONFIG, PARQUET_RETENTION
@@ -16,7 +18,7 @@ logger = get_logger(__name__)
 class SupabaseStorage:
     """
     Handler for Supabase Storage operations
-    Uploads parquet files to Supabase Storage bucket
+    Uploads parquet files and manages Upstox access tokens
     """
     
     def __init__(self, url: str, key: str):
@@ -30,6 +32,7 @@ class SupabaseStorage:
         self.url = url
         self.key = key
         self.bucket_name = SUPABASE_CONFIG['bucket_name']
+        self.token_path = 'credentials/upstox_token.json'
         self.client: Optional[Client] = None
         
     def authenticate(self) -> bool:
@@ -121,6 +124,135 @@ class SupabaseStorage:
         except Exception as e:
             logger.error(f"\n✗ Supabase Storage test failed: {e}")
             return False, f"Test error: {e}"
+    
+    # ==================== TOKEN MANAGEMENT METHODS ====================
+    
+    def upload_token(self, token_data: Dict) -> Tuple[bool, str]:
+        """
+        Upload Upstox access token to Supabase Storage
+        
+        Args:
+            token_data: Dictionary containing token and user info
+                Expected keys: access_token, user_info, timestamp
+        
+        Returns:
+            Tuple[bool, str]: (success, message)
+        """
+        try:
+            if not self.client:
+                if not self.authenticate():
+                    return False, "Failed to authenticate with Supabase"
+            
+            logger.info(f"Uploading token to {self.token_path}...")
+            
+            # Convert token data to JSON bytes
+            token_json = json.dumps(token_data, indent=2)
+            token_bytes = token_json.encode('utf-8')
+            
+            # Upload to Supabase (upsert = overwrite if exists)
+            self.client.storage.from_(self.bucket_name).upload(
+                path=self.token_path,
+                file=token_bytes,
+                file_options={"content-type": "application/json", "upsert": "true"}
+            )
+            
+            logger.info(f"✓ Token uploaded successfully to Supabase")
+            logger.info(f"  Path: {self.bucket_name}/{self.token_path}")
+            
+            return True, "Token uploaded successfully"
+            
+        except Exception as e:
+            error_msg = f"Failed to upload token: {str(e)}"
+            logger.error(f"✗ {error_msg}")
+            return False, error_msg
+    
+    def download_token(self) -> Tuple[bool, Optional[Dict], str]:
+        """
+        Download Upstox access token from Supabase Storage
+        
+        Returns:
+            Tuple[bool, Optional[Dict], str]: (success, token_data, message)
+        """
+        try:
+            if not self.client:
+                if not self.authenticate():
+                    return False, None, "Failed to authenticate with Supabase"
+            
+            logger.info(f"Downloading token from {self.token_path}...")
+            
+            # Download from Supabase
+            response = self.client.storage.from_(self.bucket_name).download(self.token_path)
+            
+            if not response:
+                return False, None, "Token file not found in Supabase"
+            
+            # Parse JSON
+            token_data = json.loads(response.decode('utf-8'))
+            
+            logger.info("✓ Token downloaded successfully from Supabase")
+            logger.info(f"  User: {token_data.get('user_info', {}).get('user_name', 'N/A')}")
+            logger.info(f"  Timestamp: {token_data.get('timestamp', 'N/A')}")
+            
+            return True, token_data, "Token downloaded successfully"
+            
+        except Exception as e:
+            error_msg = f"Failed to download token: {str(e)}"
+            logger.error(f"✗ {error_msg}")
+            return False, None, error_msg
+    
+    def check_token_exists(self) -> Tuple[bool, str]:
+        """
+        Check if token file exists in Supabase Storage
+        
+        Returns:
+            Tuple[bool, str]: (exists, message)
+        """
+        try:
+            if not self.client:
+                if not self.authenticate():
+                    return False, "Failed to authenticate with Supabase"
+            
+            # Try to download token
+            response = self.client.storage.from_(self.bucket_name).download(self.token_path)
+            
+            if response:
+                logger.info(f"✓ Token exists at {self.token_path}")
+                return True, "Token exists"
+            else:
+                logger.info(f"✗ Token does not exist at {self.token_path}")
+                return False, "Token not found"
+            
+        except Exception as e:
+            error_msg = f"Error checking token: {str(e)}"
+            logger.warning(error_msg)
+            return False, error_msg
+    
+    def delete_token(self) -> Tuple[bool, str]:
+        """
+        Delete token file from Supabase Storage
+        
+        Returns:
+            Tuple[bool, str]: (success, message)
+        """
+        try:
+            if not self.client:
+                if not self.authenticate():
+                    return False, "Failed to authenticate with Supabase"
+            
+            logger.info(f"Deleting token from {self.token_path}...")
+            
+            # Delete from Supabase
+            self.client.storage.from_(self.bucket_name).remove([self.token_path])
+            
+            logger.info("✓ Token deleted successfully from Supabase")
+            return True, "Token deleted successfully"
+            
+        except Exception as e:
+            error_msg = f"Failed to delete token: {str(e)}"
+            logger.error(f"✗ {error_msg}")
+            return False, error_msg
+    
+    # ==================== PARQUET MANAGEMENT METHODS ====================
     
     def prepare_parquet_data(self, df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """
