@@ -113,9 +113,9 @@ SYMBOL_INFO_CONFIG = {
 # ==================== ASYNC PROCESSING ====================
 # OPTIMIZED FOR RENDER FREE TIER (512MB RAM)
 ASYNC_CONFIG = {
-    'max_concurrent_requests': 2,  # Further reduced from 3 to 2
+    'max_concurrent_requests': 3,  # Reduced from 10 to prevent OOM on free tier
     'chunk_size': 50,
-    'semaphore_limit': 2  # Match concurrent requests
+    'semaphore_limit': 3  # Match concurrent requests
 }
 
 # ==================== LOGGING CONFIGURATION ====================
