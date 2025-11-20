@@ -122,17 +122,34 @@ class HistoricalDataFetcher:
                             df = pd.DataFrame(candles, columns=[
                                 "timestamp", "open", "high", "low", "close", "volume", "open_interest"
                             ])
-                            
+
+                            # SAFETY CHECK: Validate DataFrame immediately after creation
+                            if df.empty:
+                                logger.warning(f"{trading_symbol} ({data_source}): No candles returned from API")
+                                return None
+
+                            if len(df.columns) == 0:
+                                logger.warning(f"{trading_symbol} ({data_source}): DataFrame has no columns")
+                                return None
+
+                            # Verify all expected columns are present
+                            expected_cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+                            missing_cols = [col for col in expected_cols if col not in df.columns]
+                            if missing_cols:
+                                logger.warning(f"{trading_symbol} ({data_source}): Missing columns {missing_cols}")
+                                return None
+
+                            # Now safe to process - columns definitely exist
                             df['timestamp'] = pd.to_datetime(df['timestamp'])
                             df['trading_symbol'] = trading_symbol
                             df['hl2'] = (df['high'] + df['low']) / 2
                             df = df.sort_values('timestamp').reset_index(drop=True)
-                            
+
                             is_valid, message = DataValidator.validate_candle_data(df)
                             if not is_valid:
                                 logger.warning(f"{trading_symbol} ({data_source}): Validation failed - {message}")
                                 return None
-                            
+
                             return df
                         
                         elif response.status == 429:
