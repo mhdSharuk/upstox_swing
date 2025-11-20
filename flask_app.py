@@ -24,7 +24,8 @@ from config.env_loader import (
     UPSTOX_TOTP_SECRET,
     FLASK_SECRET_KEY,
     SUPABASE_URL,
-    SUPABASE_KEY
+    SUPABASE_KEY,
+    UPSTOX_REDIRECT_URI
 )
 from config.settings import (
     PYTHONANYWHERE_CONFIG,
@@ -121,7 +122,7 @@ def login():
             return jsonify({'error': 'Unauthorized'}), 401
         
         # Generate Upstox OAuth URL
-        redirect_uri = PYTHONANYWHERE_CONFIG['redirect_uri']
+        redirect_uri = UPSTOX_REDIRECT_URI
         
         # Build OAuth URL
         oauth_url = (
@@ -177,7 +178,7 @@ def callback():
             "code": auth_code,
             "client_id": UPSTOX_API_KEY,
             "client_secret": UPSTOX_API_SECRET,
-            "redirect_uri": PYTHONANYWHERE_CONFIG['redirect_uri'],
+            "redirect_uri": UPSTOX_REDIRECT_URI,
             "grant_type": "authorization_code"
         }
         
