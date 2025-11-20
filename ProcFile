@@ -1,1 +1,1 @@
-web: gunicorn flask_app:app --bind 0.0.0.0:$PORT --workers 2 --threads 1 --timeout 3600 --graceful-timeout 3600 --max-requests 100 --max-requests-jitter 10 --worker-class sync --log-level info --access-logfile - --error-logfile - --capture-output
+web: gunicorn flask_app:app --bind 0.0.0.0:$PORT --workers 4 --threads 4 --timeout 3600 --graceful-timeout 3600 --max-requests 100 --max-requests-jitter 10 --worker-class sync --log-level info --access-logfile - --error-logfile - --capture-output
