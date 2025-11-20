@@ -31,3 +31,5 @@ ijson>=3.2.0
 python-dateutil>=2.8.0
 pytz>=2023.3
 python-dotenv>=0.20.0
+
+gunicorn>=20.1.0
