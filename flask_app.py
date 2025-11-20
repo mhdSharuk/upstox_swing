@@ -28,10 +28,8 @@ from config.env_loader import (
     UPSTOX_REDIRECT_URI
 )
 from config.settings import (
-    PYTHONANYWHERE_CONFIG,
     SUPERTREND_CONFIGS_125M,
     SUPERTREND_CONFIGS_DAILY,
-    TIMEFRAME_CONFIG,
     INSTRUMENT_FILTERS
 )
 
