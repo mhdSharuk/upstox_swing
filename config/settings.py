@@ -100,7 +100,7 @@ INSTRUMENT_FILTERS = {
     'instrument_types': ['EQ'],
     'key_pattern': 'INE',
     'exchange': 'NSE_EQ',
-    'min_market_cap': 1000
+    'min_market_cap': 5000
 }
 
 # ==================== SYMBOL INFO CSV ====================
