@@ -348,7 +348,7 @@ def run_job_async():
     """
     Background job function - runs the complete pipeline
     Logs are flushed immediately for real-time visibility
-    ALL METHOD NAMES VERIFIED AGAINST ACTUAL IMPLEMENTATIONS
+    ALL METHOD NAMES CORRECTED TO MATCH ACTUAL IMPLEMENTATIONS
     """
     global job_status
     
@@ -397,7 +397,7 @@ def run_job_async():
         
         min_mcap = INSTRUMENT_FILTERS.get('min_market_cap', 5000)
         symbol_df = symbol_merger.symbol_info_df
-        filtered_df = symbol_df[symbol_df['market_cap'] >= min_mcap]
+        filtered_df = symbol_df[symbol_df['market_cap'] >= min_mcap].head(50)
         allowed_symbols = set(filtered_df['trading_symbol'].tolist())
         
         mapper = InstrumentMapper(access_token)
@@ -434,17 +434,48 @@ def run_job_async():
         sys.stdout.flush()
         job_status['progress'] = {'stage': 'indicators', 'details': 'Calculating indicators'}
         
+        # CORRECTED: SupertrendCalculator takes NO arguments
+        calculator = SupertrendCalculator()
         calculated_data = {}
+        state_variables = {}
+        
         for timeframe, instruments_data in historical_data.items():
             if timeframe == '125min':
                 configs = SUPERTREND_CONFIGS_125M
             else:
                 configs = SUPERTREND_CONFIGS_DAILY
             
-            calculator = SupertrendCalculator(configs)
-            calculated_data[timeframe] = calculator.calculate_all_instruments(instruments_data)
+            # CORRECTED: Use calculate_with_state_preservation()
+            calculated, states = calculator.calculate_with_state_preservation(
+                instruments_data,
+                configs,
+                timeframe
+            )
+            calculated_data[timeframe] = calculated
+            state_variables[timeframe] = states
         
         logger.info("✅ Indicators calculated")
+        sys.stdout.flush()
+        
+        # Step 4.5: Detect flat bases
+        logger.info("📋 Stage 4.5/7: Detecting flat bases...")
+        sys.stdout.flush()
+        job_status['progress'] = {'stage': 'flat_bases', 'details': 'Detecting flat base patterns'}
+        
+        fb_detector = FlatBaseDetector()
+        for timeframe in calculated_data.keys():
+            if timeframe == '125min':
+                configs = SUPERTREND_CONFIGS_125M
+            else:
+                configs = SUPERTREND_CONFIGS_DAILY
+            
+            # CORRECTED: Use calculate_flat_bases_for_symbols()
+            calculated_data[timeframe] = fb_detector.calculate_flat_bases_for_symbols(
+                calculated_data[timeframe],
+                configs
+            )
+        
+        logger.info("✅ Flat bases detected")
         sys.stdout.flush()
         
         # Step 5: Add percentages
@@ -454,8 +485,19 @@ def run_job_async():
         
         perc_calc = PercentageCalculator()
         with_percentages = {}
+        
         for timeframe, data in calculated_data.items():
-            with_percentages[timeframe] = perc_calc.calculate_percentages(data)
+            if timeframe == '125min':
+                configs = SUPERTREND_CONFIGS_125M
+            else:
+                configs = SUPERTREND_CONFIGS_DAILY
+            
+            # CORRECTED: Use process_timeframe_data() not calculate_percentages()
+            with_percentages[timeframe] = perc_calc.process_timeframe_data(
+                data,
+                configs,
+                timeframe
+            )
         
         logger.info("✅ Percentages calculated")
         sys.stdout.flush()
@@ -465,7 +507,6 @@ def run_job_async():
         sys.stdout.flush()
         job_status['progress'] = {'stage': 'merging', 'details': 'Merging symbol information'}
         
-        # CORRECTED: Use merge_all_timeframes() which internally calls load_symbol_info()
         # Symbol info already loaded in Step 2, so just create new instance and merge
         final_symbol_merger = SymbolInfoMerger()
         final_data = final_symbol_merger.merge_all_timeframes(with_percentages)
