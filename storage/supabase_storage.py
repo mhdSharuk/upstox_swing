@@ -149,7 +149,7 @@ class SupabaseStorage:
         original_size = (df_prepared.memory_usage(deep=True).sum() / 1024) / 1024  # KB
         logger.info(f"  Original memory size: {original_size:.2f} MB")
         
-        # df_prepared = self._optimize_datatypes(df_prepared)
+        df_prepared = self._optimize_datatypes(df_prepared)
         
         optimized_size = (df_prepared.memory_usage(deep=True).sum() / 1024) / 1024  # KB
         reduction = ((original_size - optimized_size) / original_size) * 100
