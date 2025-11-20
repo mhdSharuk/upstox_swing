@@ -12,6 +12,17 @@ import traceback
 import webbrowser
 from datetime import datetime
 import logging
+import threading
+from datetime import datetime
+
+# Job status tracking
+job_status = {
+    'running': False,
+    'last_run': None,
+    'last_status': 'idle',
+    'last_error': None,
+    'progress': {}
+}
 
 # Get absolute path of app directory
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -362,215 +373,160 @@ def token_status():
 # ============================================================================
 # MAIN CRON JOB ENDPOINT - RUN PIPELINE
 # ============================================================================
-
 @app.route('/run-job')
 def run_job():
     """
-    Main cron job endpoint - Runs the complete data pipeline
-    Uses NON-NUMBA indicators for PythonAnywhere compatibility
+    Run the main data pipeline job - ASYNC VERSION
+    Starts job in background thread and returns immediately
     """
-    try:
-        logger.info("\n" + "=" * 60)
-        logger.info("CRON JOB STARTED")
-        logger.info("=" * 60)
-        logger.info(f"Timestamp: {datetime.now().isoformat()}")
-        
-        # Check secret
-        if not check_secret():
-            logger.warning("Unauthorized job attempt - invalid secret")
-            return jsonify({'error': 'Unauthorized'}), 401
-        
-        # Step 1: Load and validate token from Supabase
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 1: LOAD TOKEN FROM SUPABASE")
-        logger.info("=" * 60)
-        
-        if not token_manager.load_token():
-            error_msg = "Failed to load token from Supabase"
-            logger.error(error_msg)
-            return jsonify({
-                'status': 'error',
-                'message': error_msg,
-                'action_required': 'Please visit /login?secret=YOUR_SECRET to authenticate'
-            }), 400
-        
-        if not token_manager.validate_token():
-            error_msg = "Token is invalid or expired"
-            logger.error(error_msg)
-            return jsonify({
-                'status': 'error',
-                'message': error_msg,
-                'action_required': 'Please visit /login?secret=YOUR_SECRET to re-authenticate'
-            }), 400
-        
-        access_token = token_manager.get_token()
-        logger.info("✓ Token loaded and validated successfully")
-        
-        # Step 2: Fetch instruments
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 2: FETCH INSTRUMENTS")
-        logger.info("=" * 60)
-        
-        # Load symbol info CSV to filter by market cap
-        symbol_merger = SymbolInfoMerger()
-        
-        if not symbol_merger.load_symbol_info():
-            logger.error("Failed to load symbol info CSV")
-            allowed_symbols = None
-        else:
-            min_mcap = INSTRUMENT_FILTERS['min_market_cap']
+    if not check_secret():
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    global job_status
+    
+    # Check if job is already running
+    if job_status['running']:
+        return jsonify({
+            'status': 'already_running',
+            'message': 'Job is already in progress',
+            'started_at': job_status.get('started_at'),
+            'progress': job_status.get('progress', {})
+        }), 409
+    
+    # Start job in background thread
+    def run_job_async():
+        global job_status
+        try:
+            job_status['running'] = True
+            job_status['started_at'] = datetime.now().isoformat()
+            job_status['last_status'] = 'running'
+            job_status['last_error'] = None
+            job_status['progress'] = {'stage': 'initializing'}
+            
+            logger.info("=" * 60)
+            logger.info("ASYNC JOB STARTED")
+            logger.info("=" * 60)
+            
+            # Get token
+            job_status['progress'] = {'stage': 'authentication', 'details': 'Getting access token'}
+            access_token = token_manager.get_token()
+            if not access_token:
+                raise Exception("No valid access token available")
+            
+            # Get instruments
+            job_status['progress'] = {'stage': 'instruments', 'details': 'Fetching instrument mappings'}
+            symbol_merger = SymbolInfoMerger()
+            if not symbol_merger.fetch_symbol_info():
+                raise Exception("Failed to fetch symbol info")
+            
+            min_mcap = INSTRUMENT_FILTERS.get('min_market_cap', 5000)
             symbol_df = symbol_merger.symbol_info_df
             filtered_df = symbol_df[symbol_df['market_cap'] >= min_mcap]
             allowed_symbols = set(filtered_df['trading_symbol'].tolist())
-            logger.info(f"Filtered symbols with market cap >= {min_mcap} Cr: {len(allowed_symbols)}")
-        
-        mapper = InstrumentMapper(access_token)
-        instruments_dict = mapper.create_instrument_mapping(allowed_symbols)
-        
-        if not instruments_dict:
-            raise Exception("Failed to create instrument mapping")
-        
-        logger.info(f"✓ Fetched {len(instruments_dict)} instruments")
-        
-        # Step 3: Fetch historical data
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 3: FETCH HISTORICAL DATA")
-        logger.info("=" * 60)
-        
-        fetcher = HistoricalDataFetcher(access_token)
-        timeframes = ['125min', 'daily']
-        
-        historical_data = fetcher.fetch_instruments_data(instruments_dict, timeframes)
-        
-        if not historical_data:
-            raise Exception("Failed to fetch historical data")
-        
-        logger.info("✓ Historical data fetched successfully")
-        
-        # Step 4: Calculate Supertrends (NON-NUMBA)
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 4: CALCULATE SUPERTRENDS (NON-NUMBA)")
-        logger.info("=" * 60)
-        logger.info("Using non-Numba indicator versions for PythonAnywhere compatibility")
-        
-        st_calculator = SupertrendCalculator()  # Non-Numba version
-        calculated_data = {}
-        state_variables = {}
-        
-        # Process 125min
-        if '125min' in historical_data:
-            logger.info("Calculating 125-minute supertrends...")
-            calculated_125m, states_125m = st_calculator.calculate_with_state_preservation(
-                historical_data['125min'],
-                SUPERTREND_CONFIGS_125M,
-                '125min',
-                use_parallel=False  # Disable parallel for Flask
-            )
-            calculated_data['125min'] = calculated_125m
-            state_variables['125min'] = states_125m
-        
-        # Process daily
-        if 'daily' in historical_data:
-            logger.info("Calculating daily supertrends...")
-            calculated_daily, states_daily = st_calculator.calculate_with_state_preservation(
-                historical_data['daily'],
-                SUPERTREND_CONFIGS_DAILY,
-                'daily',
-                use_parallel=False  # Disable parallel for Flask
-            )
-            calculated_data['daily'] = calculated_daily
-            state_variables['daily'] = states_daily
-        
-        logger.info("✓ Supertrend calculations complete")
-        
-        # Step 5: Detect Flat Base (NON-NUMBA)
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 5: DETECT FLAT BASE (NON-NUMBA)")
-        logger.info("=" * 60)
-        
-        fb_detector = FlatBaseDetector()  # Non-Numba version
-        
-        if '125min' in calculated_data:
-            logger.info("Detecting flat bases in 125-minute data...")
-            calculated_data['125min'] = fb_detector.calculate_flat_bases_for_symbols(
-                calculated_data['125min'],
-                SUPERTREND_CONFIGS_125M
-            )
-        
-        if 'daily' in calculated_data:
-            logger.info("Detecting flat bases in daily data...")
-            calculated_data['daily'] = fb_detector.calculate_flat_bases_for_symbols(
-                calculated_data['daily'],
-                SUPERTREND_CONFIGS_DAILY
-            )
-        
-        logger.info("✓ Flat base detection complete")
-        
-        # Step 6: Calculate Percentages
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 6: CALCULATE PERCENTAGES")
-        logger.info("=" * 60)
-        
-        pct_calculator = PercentageCalculator()
-        configs_dict = {
-            '125min': SUPERTREND_CONFIGS_125M,
-            'daily': SUPERTREND_CONFIGS_DAILY
-        }
-        
-        with_percentages = pct_calculator.process_all_timeframes(calculated_data, configs_dict)
-        
-        if not with_percentages:
-            raise Exception("Failed to calculate percentages")
-        
-        logger.info("✓ Percentage calculations complete")
-        
-        # Step 7: Merge Symbol Info
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 7: MERGE SYMBOL INFO")
-        logger.info("=" * 60)
-        
-        final_data = symbol_merger.merge_all_timeframes(with_percentages)
-        
-        if not final_data:
-            raise Exception("Failed to merge symbol info")
-        
-        logger.info("✓ Symbol info merge complete")
-        
-        # Step 8: Upload to Supabase
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 8: UPLOAD TO SUPABASE")
-        logger.info("=" * 60)
-        
-        success = supabase_storage.upload_all_timeframes(final_data)
-        
-        if not success:
-            raise Exception("Failed to upload parquet files to Supabase")
-        
-        logger.info("✓ Parquet files uploaded successfully")
-        
-        # Success response
-        logger.info("\n" + "=" * 60)
-        logger.info("✓ CRON JOB COMPLETED SUCCESSFULLY")
-        logger.info("=" * 60)
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Pipeline executed successfully',
-            'timestamp': datetime.now().isoformat(),
-            'data': {
-                'instruments_processed': len(instruments_dict),
-                'timeframes': list(final_data.keys()),
-                'storage': f"{supabase_storage.bucket_name} (Supabase)",
-                'indicator_version': 'non-numba (PythonAnywhere compatible)'
+            
+            mapper = InstrumentMapper(access_token)
+            instruments_dict = mapper.create_instrument_mapping(allowed_symbols)
+            
+            if not instruments_dict:
+                raise Exception("Failed to create instrument mapping")
+            
+            logger.info(f"Mapped {len(instruments_dict)} instruments")
+            
+            # Fetch historical data
+            job_status['progress'] = {
+                'stage': 'fetching_data', 
+                'details': f'Fetching data for {len(instruments_dict)} instruments',
+                'instruments_total': len(instruments_dict)
             }
-        })
-        
-    except Exception as e:
-        logger.error(f"Cron job failed: {e}")
-        logger.error(traceback.format_exc())
-        return jsonify(get_error_response("Cron job execution failed", e)), 500
+            
+            fetcher = HistoricalDataFetcher(access_token)
+            timeframes = ['125min', 'daily']
+            historical_data = fetcher.fetch_instruments_data(instruments_dict, timeframes)
+            
+            if not historical_data:
+                raise Exception("No historical data fetched")
+            
+            # Calculate indicators
+            job_status['progress'] = {'stage': 'indicators', 'details': 'Calculating indicators'}
+            
+            calculated_data = {}
+            for timeframe, instruments_data in historical_data.items():
+                if timeframe == '125min':
+                    configs = SUPERTREND_CONFIGS_125M
+                else:
+                    configs = SUPERTREND_CONFIGS_DAILY
+                
+                calculator = SupertrendCalculator(configs)
+                calculated_data[timeframe] = calculator.calculate_all_instruments(instruments_data)
+            
+            # Add percentages
+            job_status['progress'] = {'stage': 'percentages', 'details': 'Calculating percentages'}
+            
+            perc_calc = PercentageCalculator()
+            with_percentages = {}
+            for timeframe, data in calculated_data.items():
+                with_percentages[timeframe] = perc_calc.calculate_percentages(data)
+            
+            # Merge symbol info
+            job_status['progress'] = {'stage': 'merging', 'details': 'Merging symbol information'}
+            
+            final_data = {}
+            for timeframe, data in with_percentages.items():
+                final_data[timeframe] = symbol_merger.merge_symbol_info(data)
+            
+            # Upload to Supabase
+            job_status['progress'] = {'stage': 'uploading', 'details': 'Uploading to Supabase'}
+            
+            supabase_storage = SupabaseStorage(SUPABASE_URL, SUPABASE_KEY)
+            supabase_storage.authenticate()
+            
+            upload_results = {}
+            for timeframe, data in final_data.items():
+                result = supabase_storage.upload_dataframe(data, timeframe)
+                upload_results[timeframe] = result
+            
+            # Success
+            job_status['running'] = False
+            job_status['last_run'] = datetime.now().isoformat()
+            job_status['last_status'] = 'success'
+            job_status['progress'] = {
+                'stage': 'completed',
+                'upload_results': upload_results,
+                'instruments_processed': len(instruments_dict)
+            }
+            
+            logger.info("=" * 60)
+            logger.info("ASYNC JOB COMPLETED SUCCESSFULLY")
+            logger.info("=" * 60)
+            
+        except Exception as e:
+            job_status['running'] = False
+            job_status['last_run'] = datetime.now().isoformat()
+            job_status['last_status'] = 'error'
+            job_status['last_error'] = str(e)
+            job_status['progress'] = {'stage': 'failed', 'error': str(e)}
+            logger.error(f"Async job failed: {e}")
+            logger.error(traceback.format_exc())
+    
+    # Start background thread
+    thread = threading.Thread(target=run_job_async, daemon=True)
+    thread.start()
+    
+    return jsonify({
+        'status': 'started',
+        'message': 'Job started in background',
+        'started_at': job_status['started_at'],
+        'check_status_at': '/job-status?secret=' + FLASK_SECRET_KEY
+    }), 202
 
 
+@app.route('/job-status')
+def job_status_endpoint():
+    """Check the status of the background job"""
+    if not check_secret():
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    return jsonify(job_status)
 # ============================================================================
 # APPLICATION ENTRY POINT
 # ============================================================================
