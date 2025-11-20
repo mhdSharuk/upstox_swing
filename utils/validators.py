@@ -1,6 +1,6 @@
 """
 Data validation utilities for Upstox Supertrend Project
-FIXED VERSION: Dynamic validation based on data length and ATR period
+FIXED VERSION: Better error handling for missing columns and dynamic validation
 """
 
 import pandas as pd
@@ -32,36 +32,59 @@ class DataValidator:
             required_columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
         
         # Check if DataFrame is empty
+        if df is None:
+            return False, "DataFrame is None"
+        
         if df.empty:
             return False, "DataFrame is empty"
+        
+        # Check if DataFrame has any columns
+        if len(df.columns) == 0:
+            return False, "DataFrame has no columns"
         
         # Check for required columns
         missing_columns = set(required_columns) - set(df.columns)
         if missing_columns:
             return False, f"Missing required columns: {missing_columns}"
         
-        # Check for null values in critical columns
+        # Check for null values in critical columns - ONLY if columns exist
         price_columns = ['open', 'high', 'low', 'close']
-        null_counts = df[price_columns].isnull().sum()
-        if null_counts.any():
-            return False, f"Null values found in price columns: {null_counts[null_counts > 0].to_dict()}"
+        available_price_cols = [col for col in price_columns if col in df.columns]
+        
+        if not available_price_cols:
+            return False, "No price columns (open/high/low/close) found in DataFrame"
+        
+        # Check for null values
+        try:
+            null_counts = df[available_price_cols].isnull().sum()
+            if null_counts.any():
+                return False, f"Null values found in price columns: {null_counts[null_counts > 0].to_dict()}"
+        except Exception as e:
+            return False, f"Error checking null values: {str(e)}"
         
         # Check for negative prices
-        if (df[price_columns] < 0).any().any():
-            return False, "Negative prices found in data"
+        try:
+            if (df[available_price_cols] < 0).any().any():
+                return False, "Negative prices found in data"
+        except Exception as e:
+            return False, f"Error checking negative prices: {str(e)}"
         
-        # Check high >= low
-        invalid_hl = df[df['high'] < df['low']]
-        if not invalid_hl.empty:
-            return False, f"Found {len(invalid_hl)} rows where high < low"
+        # Only check high/low if both columns exist
+        if 'high' in df.columns and 'low' in df.columns:
+            # Check high >= low
+            invalid_hl = df[df['high'] < df['low']]
+            if not invalid_hl.empty:
+                return False, f"Found {len(invalid_hl)} rows where high < low"
         
-        # Check open/close within high/low range
-        invalid_range = df[
-            (df['open'] > df['high']) | (df['open'] < df['low']) |
-            (df['close'] > df['high']) | (df['close'] < df['low'])
-        ]
-        if not invalid_range.empty:
-            return False, f"Found {len(invalid_range)} rows where open/close outside high/low range"
+        # Only check open/close range if all required columns exist
+        if all(col in df.columns for col in ['open', 'high', 'low', 'close']):
+            # Check open/close within high/low range
+            invalid_range = df[
+                (df['open'] > df['high']) | (df['open'] < df['low']) |
+                (df['close'] > df['high']) | (df['close'] < df['low'])
+            ]
+            if not invalid_range.empty:
+                return False, f"Found {len(invalid_range)} rows where open/close outside high/low range"
         
         return True, "Data validation passed"
     
