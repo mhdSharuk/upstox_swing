@@ -416,7 +416,7 @@ class SupabaseStorage:
         
         all_success = True
         
-        for timeframe, df in data_dict.items():
+        for timeframe, df in data_dict.items(): 
             success = self.upload_parquet(df, timeframe)
             
             if not success:
