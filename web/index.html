@@ -63,52 +63,57 @@
       <!-- Signals Content -->
       <div id="signals-content" style="display: none;">
         
-        <!-- Volatility Support (VS) Table -->
-        <div class="signal-table">
-          <div class="table-header vs-header">
-            <span>Volatility Support</span>
-            <span class="signal-count" id="vs-count">0</span>
+        <!-- Tables Grid Container -->
+        <div class="signals-grid">
+          
+          <!-- Volatility Support (VS) Table -->
+          <div class="signal-table">
+            <div class="table-header vs-header">
+              <span>Volatility Support</span>
+              <span class="signal-count" id="vs-count">0</span>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">
+                      <input type="checkbox" id="vs-select-all" title="Select All">
+                    </th>
+                    <th>Symbol</th>
+                    <th>Close</th>
+                  </tr>
+                </thead>
+                <tbody id="vs-tbody">
+                  <!-- VS signals will be inserted here -->
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div class="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th style="width: 40px;">
-                    <input type="checkbox" id="vs-select-all" title="Select All">
-                  </th>
-                  <th>Symbol</th>
-                  <th>Close</th>
-                </tr>
-              </thead>
-              <tbody id="vs-tbody">
-                <!-- VS signals will be inserted here -->
-              </tbody>
-            </table>
+          
+          <!-- Volatility Breakout (VB) Table -->
+          <div class="signal-table">
+            <div class="table-header vb-header">
+              <span>Volatility Breakout</span>
+              <span class="signal-count" id="vb-count">0</span>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">
+                      <input type="checkbox" id="vb-select-all" title="Select All">
+                    </th>
+                    <th>Symbol</th>
+                    <th>Close</th>
+                  </tr>
+                </thead>
+                <tbody id="vb-tbody">
+                  <!-- VB signals will be inserted here -->
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-        
-        <!-- Volatility Breakout (VB) Table -->
-        <div class="signal-table">
-          <div class="table-header vb-header">
-            <span>Volatility Breakout</span>
-            <span class="signal-count" id="vb-count">0</span>
-          </div>
-          <div class="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th style="width: 40px;">
-                    <input type="checkbox" id="vb-select-all" title="Select All">
-                  </th>
-                  <th>Symbol</th>
-                  <th>Close</th>
-                </tr>
-              </thead>
-              <tbody id="vb-tbody">
-                <!-- VB signals will be inserted here -->
-              </tbody>
-            </table>
-          </div>
+          
         </div>
         
       </div>
