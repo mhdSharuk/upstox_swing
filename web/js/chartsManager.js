@@ -103,10 +103,54 @@ class ChartsManager {
     if (el) el.remove();
   }
 
+
+
+  sanitizeAndSortPoints(points) {
+    const map = Object.create(null);
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      if (!p) continue;
+      const t = Number(p.time);
+      const v = Number(p.value);
+      if (!Number.isFinite(t) || !Number.isFinite(v)) continue;
+      map[t] = { time: t, value: v };
+    }
+    const keys = Object.keys(map).map(k => Number(k)).sort((a, b) => a - b);
+    return keys.map(k => map[k]);
+  }
+
   renderSingleChart(containerId, symbol, candles) {
     const c = document.getElementById(containerId);
     if (!c) return;
+
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+    const labelMap = Object.create(null);
+    const ohlcIndexed = [];
+
+    for (let i = 0; i < candles.length; i++) {
+      const row = candles[i];
+      const tsRaw = new Date(row[CONFIG.COLUMNS.TIMESTAMP]).getTime();
+      if (!Number.isFinite(tsRaw)) continue;
+      const istMs = tsRaw + 19800000;
+      const timeLabel = (() => {
+        const d = new Date(istMs);
+        const day = String(d.getUTCDate()).padStart(2, '0');
+        const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const year = String(d.getUTCFullYear()).slice(-2);
+        const hours = String(d.getUTCHours()).padStart(2, '0');
+        const minutes = String(d.getUTCMinutes()).padStart(2, '0');
+        return `${day}/${month}/${year} ${hours}:${minutes}`;
+      })();
+      labelMap[i] = timeLabel;
+      const open = parseFloat(row[CONFIG.COLUMNS.OPEN]);
+      const high = parseFloat(row[CONFIG.COLUMNS.HIGH]);
+      const low = parseFloat(row[CONFIG.COLUMNS.LOW]);
+      const close = parseFloat(row[CONFIG.COLUMNS.CLOSE]);
+      if (![open, high, low, close].every(Number.isFinite)) continue;
+      ohlcIndexed.push({ time: i, open, high, low, close });
+    }
+
     const chart = LightweightCharts.createChart(c, {
       width: c.clientWidth,
       height: 400,
@@ -114,21 +158,33 @@ class ChartsManager {
       grid: { vertLines: { visible: false }, horzLines: { color: isDark ? '#30363d' : '#f1f3f4' } },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
       rightPriceScale: { borderColor: isDark ? '#30363d' : '#dadce0', autoScale: true, scaleMargins: { top: 0.1, bottom: 0.1 } },
-      timeScale: { borderColor: isDark ? '#30363d' : '#dadce0', timeVisible: true, secondsVisible: false, rightOffset: 20, barSpacing: 12 }
+      timeScale: { borderColor: isDark ? '#30363d' : '#dadce0', timeVisible: true, secondsVisible: false, rightOffset: 20, barSpacing: 12 },
+      localization: {
+        timeFormatter: (time) => {
+          const k = Math.floor(Number(time));
+          return labelMap[k] || '';
+        }
+      }
     });
 
-    const ohlc = candles.map(r => {
-      const tsRaw = new Date(r[CONFIG.COLUMNS.TIMESTAMP]).getTime();
-      if (!Number.isFinite(tsRaw)) return null;
-      const ist = tsRaw + 19800000;
-      const time = Math.floor(ist / 1000);
-      const open = parseFloat(r[CONFIG.COLUMNS.OPEN]);
-      const high = parseFloat(r[CONFIG.COLUMNS.HIGH]);
-      const low = parseFloat(r[CONFIG.COLUMNS.LOW]);
-      const close = parseFloat(r[CONFIG.COLUMNS.CLOSE]);
-      if (![time, open, high, low, close].every(Number.isFinite)) return null;
-      return { time, open, high, low, close };
-    }).filter(x => x);
+    let __lc_isSnapping = false;
+    chart.subscribeCrosshairMove((param) => {
+      if (__lc_isSnapping) return;
+      if (!param || param.time === undefined || param.time === null) return;
+      const t = param.time;
+      if (typeof t !== 'number') return;
+      const snapped = Math.round(t);
+      if (!Number.isFinite(snapped)) return;
+      if (Math.abs(t - snapped) < 1e-9) return;
+      __lc_isSnapping = true;
+      try {
+        chart.setCrosshairPosition({ time: snapped });
+      } catch (err) {
+        // ignore
+      } finally {
+        __lc_isSnapping = false;
+      }
+    });
 
     const cs = chart.addCandlestickSeries({
       upColor: '#089981',
@@ -140,29 +196,25 @@ class ChartsManager {
       lastValueVisible: true,
       priceLineVisible: false
     });
-    cs.setData(ohlc);
 
-    this.addSupertrendSeries(chart, candles, 'LARGER');
-    this.addSupertrendSeries(chart, candles, 'SHORTER');
-    this.addBandSeries(chart, candles);
+    cs.setData(ohlcIndexed);
 
-    if (ohlc.length > 0) {
+    this.addSupertrendSeries(chart, candles, 'LARGER', { indexed: true });
+    this.addSupertrendSeries(chart, candles, 'SHORTER', { indexed: true });
+    this.addBandSeries(chart, candles, { indexed: true });
+
+    if (ohlcIndexed.length > 0) {
       setTimeout(() => {
-        const n = ohlc.length;
+        const n = ohlcIndexed.length;
         const lastIndex = n - 1;
         const from = Math.max(0, lastIndex - 29);
         const to = lastIndex + 1;
+        try { chart.timeScale().setVisibleLogicalRange({ from, to }); } catch (e) {}
         try {
-          chart.timeScale().setVisibleLogicalRange({ from, to });
+          if (typeof chart.timeScale().scrollToRealTime === 'function') chart.timeScale().scrollToRealTime();
+          else if (typeof chart.timeScale().scrollToPosition === 'function') chart.timeScale().scrollToPosition(to, false);
         } catch (e) {}
-        try {
-          if (typeof chart.timeScale().scrollToRealTime === 'function') {
-            chart.timeScale().scrollToRealTime();
-          } else if (typeof chart.timeScale().scrollToPosition === 'function') {
-            chart.timeScale().scrollToPosition(to, false);
-          }
-        } catch (e) {}
-      }, 100);
+      }, 80);
     }
 
     this.charts.set(containerId, chart);
@@ -172,89 +224,103 @@ class ChartsManager {
     }).observe(c);
   }
 
+  addSupertrendSeries(chart, candles, type, opts = {}) {
+    const stCol = type === 'LARGER' ? CONFIG.COLUMNS.SUPERTREND_LARGER : CONFIG.COLUMNS.SUPERTREND_SHORTER;
+    const dirCol = type === 'LARGER' ? CONFIG.COLUMNS.DIRECTION_LARGER : CONFIG.COLUMNS.DIRECTION_SHORTER;
 
-  sanitizeAndSortPoints(points) {
-    const map = Object.create(null);
-    for (let i = 0; i < points.length; i++) {
-      const p = points[i];
-      if (!p) continue;
-      const t = p.time;
-      const v = p.value;
-      if (!Number.isFinite(t) || !Number.isFinite(v)) continue;
-      map[t] = { time: t, value: v };
-    }
-    const keys = Object.keys(map).map(k => Number(k)).sort((a, b) => a - b);
-    return keys.map(k => map[k]);
-  }
-
-  addSupertrendSeries(chart, candles, type) {
-    const st = type === 'LARGER' ? CONFIG.COLUMNS.SUPERTREND_LARGER : CONFIG.COLUMNS.SUPERTREND_SHORTER;
-    const dr = type === 'LARGER' ? CONFIG.COLUMNS.DIRECTION_LARGER : CONFIG.COLUMNS.DIRECTION_SHORTER;
-
-    let dir = null;
-    let seg = [];
-    const all = [];
-    let prev = null;
-
-    for (let i = 0; i < candles.length; i++) {
-      const c = candles[i];
-      const tsRaw = new Date(c[CONFIG.COLUMNS.TIMESTAMP]).getTime();
+    const rows = [];
+    for (let i = 0, idx = 0; i < candles.length; i++) {
+      const row = candles[i];
+      const tsRaw = new Date(row[CONFIG.COLUMNS.TIMESTAMP]).getTime();
       if (!Number.isFinite(tsRaw)) continue;
-      const t = Math.floor((tsRaw + 19800000) / 1000);
-      if (!Number.isFinite(t)) continue;
-      const val = parseFloat(c[st]);
+      const val = parseFloat(row[stCol]);
+      const dir = row[dirCol];
       if (!Number.isFinite(val)) continue;
-      const d = c[dr];
-      const tt = t - 1;
+      rows.push({ index: idx, value: val, dir });
+      idx++;
+    }
+    if (rows.length === 0) return;
 
-      if (dir === null || dir !== d) {
-        if (seg.length > 0) all.push({ data: seg.slice(), dir });
+    const anchors = new Array(rows.length);
+    for (let i = 0; i < rows.length; i++) {
+      const t0 = rows[i].index;
+      const t1 = i < rows.length - 1 ? rows[i + 1].index : (i > 0 ? rows[i].index + Math.max(1, rows[i].index - rows[i - 1].index) : rows[i].index + 1);
+      anchors[i] = (t0 + t1) / 2;
+    }
+
+    let currentDir = null;
+    let seg = [];
+    const segments = [];
+    let prevValue = null;
+
+    for (let i = 0; i < rows.length; i++) {
+      const anchor = anchors[i];
+      const value = rows[i].value;
+      const direction = rows[i].dir;
+
+      if (currentDir === null || currentDir !== direction) {
+        if (seg.length > 0) segments.push({ data: seg.slice(), dir: currentDir });
         seg = seg.length ? [seg[seg.length - 1]] : [];
-        dir = d;
+        currentDir = direction;
       }
 
-      if (prev !== null && prev !== val && seg.length > 0) seg.push({ time: tt, value: prev });
-      seg.push({ time: tt, value: val });
-      prev = val;
+      if (prevValue !== null && prevValue !== value && seg.length > 0) seg.push({ time: anchor, value: prevValue });
+      seg.push({ time: anchor, value });
+      prevValue = value;
 
-      if (i === candles.length - 1 && seg.length > 0) all.push({ data: seg.slice(), dir });
+      if (i === rows.length - 1 && seg.length > 0) segments.push({ data: seg.slice(), dir: currentDir });
     }
 
-    for (let j = 0; j < all.length; j++) {
-      const sg = all[j];
-      const clean = this.sanitizeAndSortPoints(sg.data);
-      if (!clean.length) continue;
-      const color = type === 'LARGER' ? (sg.dir === -1 ? '#34a853' : '#f23645') : (sg.dir === -1 ? '#FFD700' : '#1a73e8');
+    for (let s = 0; s < segments.length; s++) {
+      const seg = segments[s];
+      const pts = this.sanitizeAndSortPoints(seg.data);
+      if (!pts.length) continue;
+      const color = type === 'LARGER' ? (seg.dir === -1 ? '#34a853' : '#f23645') : (seg.dir === -1 ? '#FFD700' : '#1a73e8');
       const ls = chart.addLineSeries({
         color,
         lineWidth: 2,
         lineStyle: LightweightCharts.LineStyle.Solid,
-        lineType: LightweightCharts.LineType.WithSteps,
+        lineType: LightweightCharts.LineType.Simple,
         crosshairMarkerVisible: true,
         lastValueVisible: false,
         priceLineVisible: false
       });
-      ls.setData(clean);
+      ls.setData(pts);
     }
   }
 
-  addBandSeries(chart, candles) {
+  addBandSeries(chart, candles, opts = {}) {
     const process = (col, dirCol, colorA, colorB) => {
+      const rows = [];
+      for (let i = 0, idx = 0; i < candles.length; i++) {
+        const row = candles[i];
+        const tsRaw = new Date(row[CONFIG.COLUMNS.TIMESTAMP]).getTime();
+        if (!Number.isFinite(tsRaw)) continue;
+        const v = parseFloat(row[col]);
+        const d = row[dirCol];
+        if (!Number.isFinite(v)) continue;
+        rows.push({ index: idx, value: v, dir: d });
+        idx++;
+      }
+      if (rows.length === 0) return;
+
+      const anchors = new Array(rows.length);
+      for (let i = 0; i < rows.length; i++) {
+        const t0 = rows[i].index;
+        const t1 = i < rows.length - 1 ? rows[i + 1].index : (i > 0 ? rows[i].index + Math.max(1, rows[i].index - rows[i - 1].index) : rows[i].index + 1);
+        anchors[i] = (t0 + t1) / 2;
+      }
+
       let op = null;
       let seg = [];
       const all = [];
       let prev = null;
-      for (let i = 0; i < candles.length; i++) {
-        const c = candles[i];
-        const tsRaw = new Date(c[CONFIG.COLUMNS.TIMESTAMP]).getTime();
-        if (!Number.isFinite(tsRaw)) continue;
-        const t = Math.floor((tsRaw + 19800000) / 1000);
-        if (!Number.isFinite(t)) continue;
-        const val = parseFloat(c[col]);
-        if (!Number.isFinite(val)) continue;
-        const d = c[dirCol];
+
+      for (let i = 0; i < rows.length; i++) {
+        const anchor = anchors[i];
+        const val = rows[i].value;
+        const d = rows[i].dir;
         const newOp = d === 1 ? colorA : colorB;
-        const tt = t - 1;
 
         if (op === null || op !== newOp) {
           if (seg.length > 0) all.push({ data: seg.slice(), op });
@@ -263,11 +329,11 @@ class ChartsManager {
           prev = null;
         }
 
-        if (prev !== null && prev !== val && seg.length > 0) seg.push({ time: tt, value: prev });
-        seg.push({ time: tt, value: val });
+        if (prev !== null && prev !== val && seg.length > 0) seg.push({ time: anchor, value: prev });
+        seg.push({ time: anchor, value: val });
         prev = val;
 
-        if (i === candles.length - 1 && seg.length > 0) all.push({ data: seg.slice(), op });
+        if (i === rows.length - 1 && seg.length > 0) all.push({ data: seg.slice(), op });
       }
 
       for (let k = 0; k < all.length; k++) {
@@ -278,7 +344,7 @@ class ChartsManager {
           color: s.op,
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Solid,
-          lineType: LightweightCharts.LineType.WithSteps,
+          lineType: LightweightCharts.LineType.Simple,
           crosshairMarkerVisible: false,
           lastValueVisible: false,
           priceLineVisible: false
@@ -290,6 +356,7 @@ class ChartsManager {
     process(CONFIG.COLUMNS.UPPERBAND_SHORTER, CONFIG.COLUMNS.DIRECTION_SHORTER, '#1a73e8FF', '#1a73e880');
     process(CONFIG.COLUMNS.LOWERBAND_SHORTER, CONFIG.COLUMNS.DIRECTION_SHORTER, '#FFD70080', '#FFD700FF');
   }
+
 
   clearAllCharts() {
     this.charts.forEach(c => { try { c.remove(); } catch {} });
