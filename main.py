@@ -190,7 +190,7 @@ class UpstoxSupertrendPipeline:
             symbol_df = symbol_merger.symbol_info_df
             
             # Filter by market cap
-            filtered_df = symbol_df[symbol_df['market_cap'] >= min_mcap]
+            filtered_df = symbol_df[symbol_df['market_cap'] >= min_mcap].sort_values(by=['market_cap'], ascending=False).head(10)
             allowed_symbols = set(filtered_df['trading_symbol'].tolist())
             
             logger.info(f"✓ Symbol info loaded:")

@@ -1,7 +1,7 @@
 """
 Supertrend Calculator - 100% Pine Script Match
 Optimized with vectorized NumPy/Pandas operations
-Matches the exact logic from Pine Script normal_supertrend()
+Matches the exact logic from Pine Script sma_supertrend()
 """
 
 import pandas as pd
@@ -9,11 +9,6 @@ import numpy as np
 from typing import Dict, Optional, Tuple, List
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
-from .atr import ATRCalculator
-from utils.logger import get_logger, ProgressLogger
-from utils.validators import DataValidator
-
-logger = get_logger(__name__)
 
 
 def _calculate_supertrend_vectorized(
@@ -28,28 +23,22 @@ def _calculate_supertrend_vectorized(
     """
     Vectorized supertrend calculation matching Pine Script exactly
     
-    Pine Script Reference:
-    ----------------------
-    normal_supertrend(factor, volPeriod, use_ema) =>
+    Pine Script Reference (sma_supertrend):
+    ----------------------------------------
+    sma_supertrend(factor, volPeriod) =>
         float st_atr = ta.atr(volPeriod)
         src = hl2
+        base = ta.sma(src, volPeriod)
         
-        float upperBand = na
-        float lowerBand = na
-        
-        if use_ema
-            upperBand := ta.sma(src, volPeriod) + factor * st_atr
-            lowerBand := ta.sma(src, volPeriod) - factor * st_atr
-        else
-            upperBand := src + factor * st_atr
-            lowerBand := src - factor * st_atr
+        float upperBand = base + factor * st_atr
+        float lowerBand = base - factor * st_atr
         
         prevLowerBand = nz(lowerBand[1])
         prevUpperBand = nz(upperBand[1])
         
-        lowerBand := lowerBand > prevLowerBand or src[1] < prevLowerBand ? lowerBand : prevLowerBand
-        upperBand := upperBand < prevUpperBand or src[1] > prevUpperBand ? upperBand : prevUpperBand
-        
+        lowerBand := (lowerBand > prevLowerBand or (src[1] < prevLowerBand and close[1] < prevLowerBand)) ? lowerBand : prevLowerBand
+        upperBand := (upperBand < prevUpperBand or (src[1] > prevUpperBand and close[1] > prevUpperBand)) ? upperBand : prevUpperBand
+
         int direction = na
         float superTrend = na
         prevSuperTrend = superTrend[1]
@@ -57,10 +46,10 @@ def _calculate_supertrend_vectorized(
         if na(st_atr[1])
             direction := 1
         else if prevSuperTrend == prevUpperBand
-            direction := src > upperBand ? -1 : 1
+            direction := src > upperBand and close > upperBand ? -1 : 1
         else
-            direction := src < lowerBand ? 1 : -1
-        
+            direction := src < lowerBand and close < lowerBand ? 1 : -1
+
         superTrend := direction == -1 ? lowerBand : upperBand
         
         [superTrend, direction, lowerBand, upperBand]
@@ -85,8 +74,8 @@ def _calculate_supertrend_vectorized(
     supertrend = np.full(n, np.nan, dtype=np.float64)
     direction = np.full(n, np.nan, dtype=np.float64)
     
-    # Pine Script: upperBand := source + factor * st_atr
-    # Pine Script: lowerBand := source - factor * st_atr
+    # Pine Script: upperBand := base + factor * st_atr
+    # Pine Script: lowerBand := base - factor * st_atr
     upperBand = source + atr_multiplier * atr
     lowerBand = source - atr_multiplier * atr
     
@@ -94,27 +83,28 @@ def _calculate_supertrend_vectorized(
     # Pine Script:
     #   prevLowerBand = nz(lowerBand[1])
     #   prevUpperBand = nz(upperBand[1])
-    #   lowerBand := lowerBand > prevLowerBand or src[1] < prevLowerBand ? lowerBand : prevLowerBand
-    #   upperBand := upperBand < prevUpperBand or src[1] > prevUpperBand ? upperBand : prevUpperBand
+    #   lowerBand := (lowerBand > prevLowerBand or (src[1] < prevLowerBand and close[1] < prevLowerBand)) ? lowerBand : prevLowerBand
+    #   upperBand := (upperBand < prevUpperBand or (src[1] > prevUpperBand and close[1] > prevUpperBand)) ? upperBand : prevUpperBand
     
     for i in range(1, n):
         # nz(lowerBand[1]) - get previous lowerBand, use current if NaN
         prev_lowerBand = lowerBand[i-1] if not np.isnan(lowerBand[i-1]) else lowerBand[i]
         prev_upperBand = upperBand[i-1] if not np.isnan(upperBand[i-1]) else upperBand[i]
         
-        # src[1] - previous hl2 value
+        # src[1] and close[1] - previous hl2 and close values
         prev_hl2 = hl2[i-1]
+        prev_close = close[i-1]
         
         # Adjust lowerBand
-        # lowerBand := lowerBand > prevLowerBand or src[1] < prevLowerBand ? lowerBand : prevLowerBand
-        if lowerBand[i] > prev_lowerBand or prev_hl2 < prev_lowerBand:
+        # lowerBand := (lowerBand > prevLowerBand or (src[1] < prevLowerBand and close[1] < prevLowerBand)) ? lowerBand : prevLowerBand
+        if lowerBand[i] > prev_lowerBand or (prev_hl2 < prev_lowerBand and prev_close < prev_lowerBand):
             lowerBand[i] = lowerBand[i]
         else:
             lowerBand[i] = prev_lowerBand
         
         # Adjust upperBand
-        # upperBand := upperBand < prevUpperBand or src[1] > prevUpperBand ? upperBand : prevUpperBand
-        if upperBand[i] < prev_upperBand or prev_hl2 > prev_upperBand:
+        # upperBand := (upperBand < prevUpperBand or (src[1] > prevUpperBand and close[1] > prevUpperBand)) ? upperBand : prevUpperBand
+        if upperBand[i] < prev_upperBand or (prev_hl2 > prev_upperBand and prev_close > prev_upperBand):
             upperBand[i] = upperBand[i]
         else:
             upperBand[i] = prev_upperBand
@@ -125,9 +115,9 @@ def _calculate_supertrend_vectorized(
     #   if na(st_atr[1])
     #       direction := 1
     #   else if prevSuperTrend == prevUpperBand
-    #       direction := src > upperBand ? -1 : 1
+    #       direction := src > upperBand and close > upperBand ? -1 : 1
     #   else
-    #       direction := src < lowerBand ? 1 : -1
+    #       direction := src < lowerBand and close < lowerBand ? 1 : -1
     #   superTrend := direction == -1 ? lowerBand : upperBand
     
     for i in range(n):
@@ -139,17 +129,18 @@ def _calculate_supertrend_vectorized(
             prev_supertrend = supertrend[i-1]
             prev_upperBand = upperBand[i-1]
             current_hl2 = hl2[i]
+            current_close = close[i]
             
             # else if prevSuperTrend == prevUpperBand
             if prev_supertrend == prev_upperBand:
-                # direction := src > upperBand ? -1 : 1
-                if current_hl2 > upperBand[i]:
+                # direction := src > upperBand and close > upperBand ? -1 : 1
+                if current_hl2 > upperBand[i] and current_close > upperBand[i]:
                     direction[i] = -1
                 else:
                     direction[i] = 1
             else:
-                # direction := src < lowerBand ? 1 : -1
-                if current_hl2 < lowerBand[i]:
+                # direction := src < lowerBand and close < lowerBand ? 1 : -1
+                if current_hl2 < lowerBand[i] and current_close < lowerBand[i]:
                     direction[i] = 1
                 else:
                     direction[i] = -1
@@ -181,39 +172,6 @@ def _calculate_sma_vectorized(values: np.ndarray, period: int) -> np.ndarray:
     return sma
 
 
-def _calculate_supertrend_worker(args: tuple) -> Tuple[str, pd.DataFrame, Dict]:
-    """
-    Worker function for parallel supertrend calculation
-    Must be at module level for pickling (multiprocessing requirement)
-    
-    Args:
-        args: (symbol, dataframe, configs_list)
-    
-    Returns:
-        Tuple: (symbol, calculated_dataframe, state_variables)
-    """
-    symbol, df, configs = args
-    
-    try:
-        # Create calculator instance in worker process
-        calculator = SupertrendCalculator()
-        
-        # Calculate all supertrends for this symbol
-        df_with_st = calculator.calculate_multiple_supertrends(df, configs)
-        
-        # Extract state variables
-        symbol_state = {}
-        for config in configs:
-            config_state = calculator.get_state_variables(df_with_st, config['name'])
-            symbol_state.update(config_state)
-        
-        return symbol, df_with_st, symbol_state
-        
-    except Exception as e:
-        logger.error(f"Worker error for {symbol}: {e}")
-        return symbol, None, {}
-
-
 class SupertrendCalculator:
     """
     Calculate custom Supertrend indicator matching Pine Script logic EXACTLY
@@ -231,6 +189,7 @@ class SupertrendCalculator:
     
     def __init__(self):
         """Initialize Supertrend Calculator"""
+        from .atr import ATRCalculator
         self.atr_calculator = ATRCalculator()
     
     def calculate_supertrend(
@@ -245,13 +204,13 @@ class SupertrendCalculator:
         Calculate supertrend indicator matching Pine Script exactly
         
         Pine Script equivalent:
-        normal_supertrend(atr_multiplier, atr_period, use_sma)
+        sma_supertrend(atr_multiplier, atr_period)
         
         Args:
             df: DataFrame with OHLC data (must have 'high', 'low', 'close', 'hl2')
             atr_period: Period for ATR calculation (volPeriod in Pine Script)
             atr_multiplier: Multiplier for ATR bands (factor in Pine Script)
-            use_sma: If True, use SMA of HL2 (use_ema=true in Pine); if False, use raw HL2
+            use_sma: If True, use SMA of HL2 (base in Pine); if False, use raw HL2
             config_name: Name for the configuration (for column naming)
         
         Returns:
@@ -263,7 +222,7 @@ class SupertrendCalculator:
         required_cols = ['high', 'low', 'close', 'hl2']
         for col in required_cols:
             if col not in df.columns:
-                logger.error(f"Missing required column: {col}")
+                print(f"ERROR: Missing required column: {col}")
                 return df
         
         # Calculate ATR using RMA (like Pine Script's ta.atr())
@@ -277,12 +236,12 @@ class SupertrendCalculator:
         
         # Calculate source (HL2 with or without SMA)
         # Pine Script: src = hl2
-        # Pine Script: if use_ema then source = ta.sma(src, volPeriod) else source = src
+        # Pine Script: base = ta.sma(src, volPeriod)
         if use_sma:
-            # Use SMA of HL2 (when use_ema=true in Pine Script)
+            # Use SMA of HL2 (base in Pine Script)
             source_np = _calculate_sma_vectorized(df['hl2'].values, atr_period)
         else:
-            # Use raw HL2 (when use_ema=false in Pine Script)
+            # Use raw HL2
             source_np = df['hl2'].values
         
         # Convert to numpy arrays
@@ -302,17 +261,6 @@ class SupertrendCalculator:
         df[f'direction_{config_name}'] = direction_np
         df[f'upperBand_{config_name}'] = upperBand_np
         df[f'lowerBand_{config_name}'] = lowerBand_np
-        
-        # Validate the calculation
-        is_valid, message = DataValidator.validate_supertrend_calculation(
-            df,
-            f'supertrend_{config_name}',
-            f'direction_{config_name}',
-            atr_period=atr_period
-        )
-        
-        if not is_valid:
-            logger.warning(f"Supertrend validation warning for {config_name}: {message}")
         
         return df
     
@@ -367,150 +315,11 @@ class SupertrendCalculator:
         
         last_idx = len(df) - 1
         
-        state = {
-            f'prev_supertrend_{config_name}': df[f'supertrend_{config_name}'].iloc[last_idx],
-            f'prev_upperBand_{config_name}': df[f'upperBand_{config_name}'].iloc[last_idx],
-            f'prev_lowerBand_{config_name}': df[f'lowerBand_{config_name}'].iloc[last_idx],
-            f'prev_direction_{config_name}': df[f'direction_{config_name}'].iloc[last_idx],
-            f'prev_hl2_{config_name}': df['hl2'].iloc[last_idx],
-            f'prev_close_{config_name}': df['close'].iloc[last_idx]
+        return {
+            f'{config_name}_prev_supertrend': df[f'supertrend_{config_name}'].iloc[last_idx],
+            f'{config_name}_prev_upperBand': df[f'upperBand_{config_name}'].iloc[last_idx],
+            f'{config_name}_prev_lowerBand': df[f'lowerBand_{config_name}'].iloc[last_idx],
+            f'{config_name}_prev_direction': df[f'direction_{config_name}'].iloc[last_idx],
+            f'{config_name}_prev_hl2': df['hl2'].iloc[last_idx],
+            f'{config_name}_prev_close': df['close'].iloc[last_idx]
         }
-        
-        return state
-    
-    def calculate_with_state_preservation(
-        self,
-        df_by_symbol: Dict[str, pd.DataFrame],
-        configs: list,
-        timeframe: str,
-        use_parallel: bool = True,
-        max_workers: Optional[int] = None
-    ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Dict]]:
-        """
-        Calculate supertrends for all symbols with optional parallel processing
-        
-        Args:
-            df_by_symbol: Dictionary mapping symbol to DataFrame
-            configs: List of supertrend configurations
-            timeframe: Timeframe identifier
-            use_parallel: Whether to use parallel processing (default: True)
-            max_workers: Number of parallel workers (default: CPU count)
-        
-        Returns:
-            Tuple: (calculated_dataframes, state_variables_by_symbol)
-        """
-        num_symbols = len(df_by_symbol)
-        
-        # For small datasets (<50 symbols), sequential is faster
-        if not use_parallel or num_symbols < 50:
-            logger.info(f"Calculating supertrends sequentially for {num_symbols} symbols...")
-            return self._calculate_sequential(df_by_symbol, configs, timeframe)
-        
-        # Use parallel processing for larger datasets
-        if max_workers is None:
-            max_workers = max(1, cpu_count() - 1)
-        
-        max_workers = min(max_workers, num_symbols, 16)
-        
-        logger.info(f"Calculating supertrends for {num_symbols} symbols using {max_workers} parallel workers...")
-        
-        return self._calculate_parallel(df_by_symbol, configs, timeframe, max_workers)
-    
-    def _calculate_sequential(
-        self,
-        df_by_symbol: Dict[str, pd.DataFrame],
-        configs: list,
-        timeframe: str
-    ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Dict]]:
-        """Sequential calculation"""
-        calculated_dfs = {}
-        states = {}
-        
-        progress = ProgressLogger(len(df_by_symbol), f"Calculating {timeframe} supertrends", logger)
-        
-        for symbol, df in df_by_symbol.items():
-            if df.empty:
-                logger.warning(f"{symbol}: Empty dataframe, skipping")
-                progress.update()
-                continue
-            
-            df_with_st = self.calculate_multiple_supertrends(df, configs)
-            calculated_dfs[symbol] = df_with_st
-            
-            symbol_state = {}
-            for config in configs:
-                config_state = self.get_state_variables(df_with_st, config['name'])
-                symbol_state.update(config_state)
-            
-            states[symbol] = symbol_state
-            progress.update()
-        
-        progress.complete(f"Calculated supertrends for {len(calculated_dfs)} symbols")
-        
-        return calculated_dfs, states
-    
-    def _calculate_parallel(
-        self,
-        df_by_symbol: Dict[str, pd.DataFrame],
-        configs: list,
-        timeframe: str,
-        max_workers: int
-    ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Dict]]:
-        """Parallel calculation with percentage-based progress"""
-        calculated_dfs = {}
-        states = {}
-        
-        args_list = [
-            (symbol, df, configs)
-            for symbol, df in df_by_symbol.items()
-            if not df.empty
-        ]
-        
-        if not args_list:
-            logger.warning("No valid data to process")
-            return {}, {}
-        
-        try:
-            with ProcessPoolExecutor(max_workers=max_workers) as executor:
-                future_to_symbol = {
-                    executor.submit(_calculate_supertrend_worker, args): args[0]
-                    for args in args_list
-                }
-                
-                completed = 0
-                failed = 0
-                total = len(future_to_symbol)
-                last_percentage = -1
-                
-                for future in as_completed(future_to_symbol):
-                    symbol = future_to_symbol[future]
-                    try:
-                        result_symbol, df_with_st, symbol_state = future.result()
-                        
-                        if df_with_st is not None and not df_with_st.empty:
-                            calculated_dfs[result_symbol] = df_with_st
-                            states[result_symbol] = symbol_state
-                            completed += 1
-                        else:
-                            failed += 1
-                            logger.warning(f"{result_symbol}: Calculation returned empty result")
-                        
-                    except Exception as e:
-                        failed += 1
-                        logger.error(f"{symbol}: Calculation failed - {e}")
-                    
-                    # Update progress - show percentage every 10%
-                    total_processed = completed + failed
-                    percentage = int((total_processed / total) * 100)
-                    if percentage >= last_percentage + 10 or total_processed == total:
-                        logger.info(f"Progress: {total_processed}/{total} ({percentage}%)")
-                        last_percentage = percentage
-                
-                logger.info(f"Calculation complete: Success: {completed}, Failed: {failed}, Total: {total}")
-        
-        except Exception as e:
-            logger.error(f"Parallel processing failed: {e}")
-            logger.info("Falling back to sequential processing...")
-            return self._calculate_sequential(df_by_symbol, configs, timeframe)
-        
-        return calculated_dfs, states

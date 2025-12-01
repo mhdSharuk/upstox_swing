@@ -1,7 +1,7 @@
 """
 Percentage Calculator - Optimized for speed
-Calculates percentage differences between HL2 and Supertrend values
-REFACTORED: Only performs calculations, no CSV loading or merging
+Calculates percentage differences between close and lowerband for shorter term supertrends
+UPDATED: Modified to calculate (close - lowerband) / close * 100 for shorter term supertrends
 """
 
 import pandas as pd
@@ -14,9 +14,16 @@ logger = get_logger(__name__)
 
 class PercentageCalculator:
     """
-    Calculate percentage differences between HL2 and Supertrend values
+    Calculate percentage differences between close and lowerband values
     Highly optimized with vectorized operations
     """
+    
+    # Define shorter term supertrends for each timeframe
+    SHORTER_TERM_CONFIGS = {
+        '60min': 'ST_60m_sma7',      # period=7 is shorter than period=35
+        '125min': 'ST_125m_sma3',    # period=3 is shorter than period=15
+        'daily': 'ST_daily_sma5'     # period=5 is shorter than period=20
+    }
     
     def __init__(self):
         """Initialize Percentage Calculator"""
@@ -25,65 +32,74 @@ class PercentageCalculator:
     def calculate_percentage_differences(
         self,
         df: pd.DataFrame,
-        configs: List[dict]
+        configs: List[dict],
+        timeframe: str
     ) -> pd.DataFrame:
         """
-        Calculate percentage differences between HL2 and Supertrend values
+        Calculate percentage difference between close and lowerband for shorter term supertrends
         OPTIMIZED: Fully vectorized, no loops
         
-        Two calculations per config:
-        1. pct_diff_avg3_ST_X: % diff between avg(last 3 HL2) and supertrend
-        2. pct_diff_latest_ST_X: % diff between latest HL2 and supertrend
+        Formula: ((close - lowerband) / close) * 100
         
-        Formula: ((HL2 - Supertrend) / HL2) * 100
+        Only calculates for the shorter term supertrend of each timeframe:
+        - 60min: ST_60m_sma7
+        - 125min: ST_125m_sma3
+        - Daily: ST_daily_sma5
         
         Args:
-            df: DataFrame with HL2 and supertrend columns
+            df: DataFrame with close and lowerband columns
             configs: List of supertrend configurations
+            timeframe: Timeframe identifier ('60min', '125min', 'daily')
         
         Returns:
-            pd.DataFrame: DataFrame with percentage difference columns added
+            pd.DataFrame: DataFrame with percentage difference column added
         """
         df = df.copy()
         
-        # Pre-calculate average of last 3 HL2 values per symbol (vectorized)
-        df['avg3_hl2'] = df.groupby('trading_symbol')['hl2'].transform(
-            lambda x: x.rolling(window=3, min_periods=1).mean()
+        # Get the shorter term config name for this timeframe
+        shorter_term_name = self.SHORTER_TERM_CONFIGS.get(timeframe)
+        
+        if not shorter_term_name:
+            logger.warning(f"No shorter term config defined for timeframe: {timeframe}")
+            return df
+        
+        # Find the matching config
+        shorter_config = None
+        for config in configs:
+            if config['name'] == shorter_term_name:
+                shorter_config = config
+                break
+        
+        if not shorter_config:
+            logger.warning(f"Shorter term config '{shorter_term_name}' not found in configs for {timeframe}")
+            return df
+        
+        # Calculate percentage difference for shorter term supertrend only
+        name = shorter_config['name']
+        lowerband_col = f'lowerBand_{name}'
+        
+        if lowerband_col not in df.columns:
+            logger.warning(f"Lowerband column '{lowerband_col}' not found, skipping")
+            return df
+        
+        if 'close' not in df.columns:
+            logger.warning(f"Close column not found, skipping")
+            return df
+        
+        # Vectorized percentage calculation with safeguards
+        # Formula: ((close - lowerband) / close) * 100
+        # Use np.where to handle division by zero and NaN values efficiently
+        df[f'pct_diff_close_lowerband_{name}'] = np.where(
+            (df['close'].notna()) & (df[lowerband_col].notna()) & (df['close'] != 0),
+            ((df['close'] - df[lowerband_col]) / df['close']) * 100,
+            np.nan
         )
         
-        # Calculate percentage differences for each config (vectorized)
-        for config in configs:
-            name = config['name']
-            supertrend_col = f'supertrend_{name}'
-            
-            if supertrend_col not in df.columns:
-                logger.warning(f"Supertrend column '{supertrend_col}' not found, skipping")
-                continue
-            
-            # Vectorized percentage calculations with safeguards
-            # Use np.where to handle division by zero and NaN values efficiently
-            
-            # 1. Average of last 3 HL2 vs Supertrend
-            df[f'pct_diff_avg3_{name}'] = np.where(
-                (df['avg3_hl2'].notna()) & (df[supertrend_col].notna()) & (df['avg3_hl2'] != 0),
-                ((df['avg3_hl2'] - df[supertrend_col]) / df['avg3_hl2']) * 100,
-                np.nan
-            )
-            
-            # 2. Latest HL2 vs Supertrend
-            df[f'pct_diff_latest_{name}'] = np.where(
-                (df['hl2'].notna()) & (df[supertrend_col].notna()) & (df['hl2'] != 0),
-                ((df['hl2'] - df[supertrend_col]) / df['hl2']) * 100,
-                np.nan
-            )
-            
-            # Cap extreme values to prevent outliers (vectorized)
-            # Values beyond ±1000% are likely data errors
-            df[f'pct_diff_avg3_{name}'] = df[f'pct_diff_avg3_{name}'].clip(-1000.0, 1000.0)
-            df[f'pct_diff_latest_{name}'] = df[f'pct_diff_latest_{name}'].clip(-1000.0, 1000.0)
+        # Cap extreme values to prevent outliers (vectorized)
+        # Values beyond ±1000% are likely data errors
+        df[f'pct_diff_close_lowerband_{name}'] = df[f'pct_diff_close_lowerband_{name}'].clip(-1000.0, 1000.0)
         
-        # Drop temporary column
-        df = df.drop(columns=['avg3_hl2'])
+        logger.info(f"✓ Calculated pct_diff_close_lowerband_{name} for {timeframe}")
         
         return df
     
@@ -120,8 +136,8 @@ class PercentageCalculator:
         logger.info(f"✓ Combined {len(combined_df)} rows from {len(all_dfs)} symbols")
         
         # Calculate percentage differences (vectorized on entire dataset)
-        logger.info("Calculating percentage differences (vectorized)...")
-        final_df = self.calculate_percentage_differences(combined_df, configs)
+        logger.info(f"Calculating close-lowerband percentage difference for shorter term supertrend...")
+        final_df = self.calculate_percentage_differences(combined_df, configs, timeframe)
         
         logger.info("=" * 60)
         logger.info(f"✓ {timeframe.upper()} PERCENTAGE CALCULATIONS COMPLETE")
