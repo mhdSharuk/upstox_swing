@@ -120,12 +120,32 @@
     </div>
     
     <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- CHARTS TAB (Placeholder) -->
+    <!-- CHARTS TAB -->
     <!-- ═══════════════════════════════════════════════════════════ -->
     <div id="charts-tab" class="tab-content">
-      <div class="placeholder">
-        <h2>📈 Charts</h2>
-        <p>Chart functionality will be implemented here.</p>
+      <!-- Strategy Filter -->
+      <div class="filters">
+        <h3>Chart Settings</h3>
+        <div class="filter-row">
+          <div class="filter-item">
+            <label for="strategy-filter">Strategy</label>
+            <select id="strategy-filter" onchange="onStrategyChange()">
+              <option value="vs">Volatility Support</option>
+              <option value="vb">Volatility Breakout</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Loading State -->
+      <div id="charts-loading" class="loading" style="display: none;">
+        <div class="spinner"></div>
+        <p>Loading charts...</p>
+      </div>
+      
+      <!-- Charts Grid (2 per row) -->
+      <div id="charts-grid" class="charts-grid">
+        <!-- Charts will be inserted here dynamically -->
       </div>
     </div>
     
@@ -142,9 +162,13 @@
   </div>
   
   <!-- Scripts -->
+  <!-- TradingView Lightweight Charts -->
+  <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+  
   <script src="js/config.js"></script>
   <script src="js/dataLoader.js"></script>
   <script src="js/filters.js"></script>
+  <script src="js/chartsManager.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

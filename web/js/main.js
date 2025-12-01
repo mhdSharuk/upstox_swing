@@ -1,5 +1,5 @@
 /**
- * Main Application Module - Signal Tab Focus
+ * Main Application Module - Signal Tab & Charts Tab
  */
 
 // Global state
@@ -19,6 +19,11 @@ function toggleTheme() {
   localStorage.setItem('theme', newTheme);
   
   updateThemeButton(newTheme);
+  
+  // Update charts theme if charts are rendered
+  if (chartsManager && chartsManager.charts.size > 0) {
+    chartsManager.updateChartsTheme();
+  }
 }
 
 function updateThemeButton(theme) {
@@ -58,8 +63,10 @@ function switchTab(tabName) {
   // Load data for the tab
   if (tabName === 'signals') {
     loadSignals();
+  } else if (tabName === 'charts') {
+    loadCharts();
   }
-  // Chart and Watchlist tabs are placeholders for now
+  // Watchlist tab is placeholder for now
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -221,6 +228,45 @@ function onFilterChange() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// CHARTS TAB - FUNCTIONALITY
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Load charts for the current strategy
+ */
+async function loadCharts() {
+  console.log('📈 Loading charts tab...');
+  
+  try {
+    // Ensure data is loaded
+    if (!dataLoader.data) {
+      await dataLoader.getData();
+    }
+    
+    // Get current strategy selection
+    const strategy = document.getElementById('strategy-filter').value;
+    
+    // Render charts
+    await chartsManager.renderCharts(strategy);
+    
+  } catch (error) {
+    console.error('❌ Error loading charts:', error);
+    alert('Error loading charts: ' + error.message);
+  }
+}
+
+/**
+ * Handle strategy change
+ */
+function onStrategyChange() {
+  const strategy = document.getElementById('strategy-filter').value;
+  console.log('Strategy changed to:', strategy);
+  
+  // Re-render charts with new strategy
+  chartsManager.renderCharts(strategy);
+}
+
+// ═══════════════════════════════════════════════════════════
 // INITIALIZATION
 // ═══════════════════════════════════════════════════════════
 
@@ -241,6 +287,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof filtersManager === 'undefined') {
     console.error('❌ filtersManager not loaded! Ensure filters.js is included.');
     alert('FiltersManager error. Check console for details.');
+    return;
+  }
+  if (typeof chartsManager === 'undefined') {
+    console.error('❌ chartsManager not loaded! Ensure chartsManager.js is included.');
+    alert('ChartsManager error. Check console for details.');
     return;
   }
   

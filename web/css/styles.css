@@ -67,13 +67,14 @@ body {
   font-size: 14px;
   background: var(--bg-primary);
   color: var(--text-primary);
-  padding: 20px;
+  padding: 15px;
   transition: background 0.3s ease, color 0.3s ease;
 }
 
 .container {
-  max-width: 1400px;
+  max-width: 100%;
   margin: 0 auto;
+  padding: 0;
 }
 
 /* ═══════════════════════════════════════════════════════════ */
@@ -84,7 +85,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
 }
 
 h1 {
@@ -120,7 +121,7 @@ h1 {
 .tabs {
   display: flex;
   gap: 10px;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
   border-bottom: 2px solid var(--border-primary);
 }
 
@@ -159,9 +160,9 @@ h1 {
 
 .filters {
   background: var(--bg-secondary);
-  padding: 20px;
+  padding: 15px;
   border-radius: 8px;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   border: 1px solid var(--border-primary);
   transition: all 0.3s ease;
@@ -170,7 +171,7 @@ h1 {
 .filters h3 {
   font-size: 16px;
   font-weight: 500;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
   color: var(--text-primary);
 }
 
@@ -205,7 +206,21 @@ h1 {
   transition: all 0.3s ease;
 }
 
-.filter-item input:focus {
+.filter-item select {
+  width: 200px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.filter-item input:focus,
+.filter-item select:focus {
   outline: none;
   border-color: var(--accent-blue);
 }
@@ -386,6 +401,62 @@ td:nth-child(3) {
 }
 
 /* ═══════════════════════════════════════════════════════════ */
+/* CHARTS GRID - FULL WIDTH 2 PER ROW LAYOUT */
+/* ═══════════════════════════════════════════════════════════ */
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.chart-container {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-primary);
+  transition: all 0.3s ease;
+  padding: 0;
+  margin: 0;
+}
+
+.chart-header {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font-weight: 500;
+  font-size: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.chart-symbol {
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--accent-blue);
+}
+
+.chart-info {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.chart-canvas {
+  width: 100%;
+  height: 400px;
+  background: var(--bg-secondary);
+  padding: 0;
+  margin: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
 /* PLACEHOLDER CONTENT */
 /* ═══════════════════════════════════════════════════════════ */
 
@@ -437,8 +508,12 @@ td:nth-child(3) {
 /* ═══════════════════════════════════════════════════════════ */
 
 @media (max-width: 1024px) {
-  /* Stack tables on tablets and below */
+  /* Stack tables and charts on tablets and below */
   .signals-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .charts-grid {
     grid-template-columns: 1fr;
   }
 }
