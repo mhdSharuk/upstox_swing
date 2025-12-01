@@ -1,5 +1,5 @@
 /**
- * Data Loader Module - FINAL VERSION
+ * Data Loader Module - UPDATED with 60min support
  * Uses hyparquet with rowFormat: 'object' for direct row-oriented data
  */
 
@@ -7,15 +7,17 @@ class DataLoader {
   constructor() {
     this.dailyData = null;
     this.min125Data = null;
+    this.min60Data = null;
     this.isLoading = {
       daily: false,
-      min125: false
+      min125: false,
+      min60: false
     };
   }
 
   /**
    * Load parquet file from Supabase with IndexedDB caching
-   * @param {string} timeframe - 'daily' or 'min125'
+   * @param {string} timeframe - 'daily', 'min125', or 'min60'
    * @returns {Promise<Array>} Parsed data as array of objects
    */
   async loadParquetData(timeframe) {
@@ -24,7 +26,16 @@ class DataLoader {
         throw new Error('CONFIG is not defined. Make sure config.js is loaded before dataLoader.js');
       }
       
-      const url = timeframe === 'daily' ? CONFIG.PARQUET_URLS.DAILY : CONFIG.PARQUET_URLS.MIN_125;
+      let url;
+      if (timeframe === 'daily') {
+        url = CONFIG.PARQUET_URLS.DAILY;
+      } else if (timeframe === 'min125') {
+        url = CONFIG.PARQUET_URLS.MIN_125;
+      } else if (timeframe === 'min60') {
+        url = CONFIG.PARQUET_URLS.MIN_60;
+      } else {
+        throw new Error(`Unknown timeframe: ${timeframe}`);
+      }
       
       console.log(`📥 Loading ${timeframe} data from:`, url);
 
@@ -106,7 +117,7 @@ class DataLoader {
         parquetRead({
           file: arrayBuffer,
           compressors,
-          rowFormat: 'object', // ← This returns array of objects!
+          rowFormat: 'object',
           onComplete: (rows) => resolve(rows),
           onError: (error) => reject(error)
         });
@@ -123,8 +134,10 @@ class DataLoader {
       // Cache the data
       if (timeframe === 'daily') {
         this.dailyData = data;
-      } else {
+      } else if (timeframe === 'min125') {
         this.min125Data = data;
+      } else if (timeframe === 'min60') {
+        this.min60Data = data;
       }
       
       this.isLoading[timeframe] = false;
@@ -140,7 +153,7 @@ class DataLoader {
 
   /**
    * Get parquet file from IndexedDB cache
-   * @param {string} timeframe - 'daily' or 'min125'
+   * @param {string} timeframe - 'daily', 'min125', or 'min60'
    * @returns {Promise<ArrayBuffer|null>} Cached buffer or null
    */
   async getFromCache(timeframe) {
@@ -170,14 +183,15 @@ class DataLoader {
 
   /**
    * Save parquet file to IndexedDB cache
-   * @param {string} timeframe - 'daily' or 'min125'
-   * @param {ArrayBuffer} buffer - File buffer
+   * @param {string} timeframe - 'daily', 'min125', or 'min60'
+   * @param {ArrayBuffer} arrayBuffer - File data
+   * @returns {Promise<void>}
    */
-  async saveToCache(timeframe, buffer) {
+  async saveToCache(timeframe, arrayBuffer) {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open('ParquetCache', 1);
       
-      request.onerror = () => reject(new Error('IndexedDB error'));
+      request.onerror = () => reject(new Error('Failed to open IndexedDB'));
       
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
@@ -190,39 +204,41 @@ class DataLoader {
         const db = event.target.result;
         const transaction = db.transaction(['files'], 'readwrite');
         const store = transaction.objectStore('files');
-        store.put(buffer, timeframe);
+        const putRequest = store.put(arrayBuffer, timeframe);
         
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(new Error('Cache save failed'));
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = () => reject(new Error('Failed to save to cache'));
       };
     });
   }
 
   /**
-   * Clear all cached parquet files
+   * Clear all cached data
+   * @returns {Promise<void>}
    */
   async clearCache() {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const request = indexedDB.open('ParquetCache', 1);
       
       request.onsuccess = (event) => {
         const db = event.target.result;
         const transaction = db.transaction(['files'], 'readwrite');
         const store = transaction.objectStore('files');
-        store.clear();
+        const clearRequest = store.clear();
         
-        transaction.oncomplete = () => {
+        clearRequest.onsuccess = () => {
           console.log('✓ Cache cleared');
           resolve();
         };
-        transaction.onerror = () => reject(new Error('Cache clear failed'));
       };
+      
+      request.onerror = () => resolve();
     });
   }
 
   /**
    * Get data for specific timeframe (loads if not cached)
-   * @param {string} timeframe - 'daily' or 'min125'
+   * @param {string} timeframe - 'daily', 'min125', or 'min60'
    * @returns {Promise<Array>} Data array
    */
   async getData(timeframe) {
@@ -231,24 +247,33 @@ class DataLoader {
         return await this.loadParquetData('daily');
       }
       return this.dailyData;
-    } else {
+    } else if (timeframe === 'min125') {
       if (!this.min125Data) {
         return await this.loadParquetData('min125');
       }
       return this.min125Data;
+    } else if (timeframe === 'min60') {
+      if (!this.min60Data) {
+        return await this.loadParquetData('min60');
+      }
+      return this.min60Data;
+    } else {
+      throw new Error(`Unknown timeframe: ${timeframe}`);
     }
   }
 
   /**
    * Force refresh data (clear cache and reload)
-   * @param {string} timeframe - 'daily' or 'min125'
+   * @param {string} timeframe - 'daily', 'min125', or 'min60'
    * @returns {Promise<Array>} Fresh data
    */
   async refreshData(timeframe) {
     if (timeframe === 'daily') {
       this.dailyData = null;
-    } else {
+    } else if (timeframe === 'min125') {
       this.min125Data = null;
+    } else if (timeframe === 'min60') {
+      this.min60Data = null;
     }
     return await this.getData(timeframe);
   }
@@ -273,11 +298,19 @@ class DataLoader {
 
   /**
    * Get available supertrend columns for a timeframe
-   * @param {string} timeframe - 'daily' or 'min125'
+   * @param {string} timeframe - 'daily', 'min125', or 'min60'
    * @returns {Array} Array of supertrend config objects
    */
   getSupertrendConfigs(timeframe) {
-    return timeframe === 'daily' ? CONFIG.SUPERTRENDS.DAILY : CONFIG.SUPERTRENDS.MIN_125;
+    if (timeframe === 'daily') {
+      return CONFIG.SUPERTRENDS.DAILY;
+    } else if (timeframe === 'min125') {
+      return CONFIG.SUPERTRENDS.MIN_125;
+    } else if (timeframe === 'min60') {
+      return CONFIG.SUPERTRENDS.MIN_60;
+    } else {
+      return [];
+    }
   }
 
   /**
@@ -332,6 +365,18 @@ class DataLoader {
     return data
       .filter(row => row.trading_symbol === symbol)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  }
+  
+  /**
+   * Get last N candles for a specific symbol
+   * @param {Array} data - Full data array
+   * @param {string} symbol - Trading symbol
+   * @param {number} n - Number of candles to get
+   * @returns {Array} Last N candles for the symbol, sorted by timestamp (oldest first)
+   */
+  getLastNCandles(data, symbol, n = 10) {
+    const allCandles = this.getSymbolCandles(data, symbol);
+    return allCandles.slice(-n); // Get last N candles
   }
 }
 

@@ -164,7 +164,7 @@ class HistoricalDataFetcher:
                         
                         elif response.status == 429:
                             wait_time = self.retry_delay * (attempt + 1)
-                            logger.warning(f"{trading_symbol} ({data_source}): Rate limit, waiting {wait_time}s")
+                            # logger.warning(f"{trading_symbol} ({data_source}): Rate limit, waiting {wait_time}s")
                             await asyncio.sleep(wait_time)
                             continue
                         

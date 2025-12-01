@@ -1,14 +1,11 @@
 /**
  * Main Application Module
- * Orchestrates all functionality - tabs, data loading, filtering, rendering
- * UPDATED: Hardcoded supertrend values for instant switching
+ * UPDATED: New Signals tab with strategy-based signal detection
  */
 
 // Global state
-let watchlistData = [];
-let currentTab = 'daily';
+let currentTab = 'signals';
 let isLoading = false;
-let symbolsTabInitialized = false;
 
 // ═══════════════════════════════════════════════════════════
 // THEME MANAGEMENT
@@ -23,7 +20,9 @@ function toggleTheme() {
   localStorage.setItem('theme', newTheme);
   
   updateThemeButton(newTheme);
-  chartRenderer.updateChartsTheme();
+  if (typeof chartRenderer !== 'undefined') {
+    chartRenderer.updateChartsTheme();
+  }
 }
 
 function updateThemeButton(theme) {
@@ -61,169 +60,131 @@ function switchTab(tab) {
   document.getElementById(tab + '-tab').classList.add('active');
   
   // Load data for the tab
-  if (tab === 'daily') {
-    loadDailySignals();
-  } else if (tab === '125min') {
-    load125minSignals();
-  } else if (tab === 'watchlist') {
-    loadWatchlist();
+  if (tab === 'signals') {
+    loadSignals();
   } else if (tab === 'charts') {
     loadChartsTab();
-  } else if (tab === 'symbols') {
-    loadSymbolsTab();
+  } else if (tab === 'watchlist') {
+    loadWatchlist();
   }
 }
 
 // ═══════════════════════════════════════════════════════════
-// DAILY SIGNALS TAB
+// SIGNALS TAB (NEW)
 // ═══════════════════════════════════════════════════════════
 
-async function loadDailySignals(forceRefresh = false) {
+async function loadSignals(forceRefresh = false) {
   if (isLoading) return;
   isLoading = true;
   
-  console.log('📡 Loading daily signals...');
+  console.log('📡 Loading signals...');
   const startTime = performance.now();
   
   try {
-    // Disable button and show loading
-    const refreshBtn = document.getElementById('daily-refresh-btn');
-    refreshBtn.disabled = true;
-    refreshBtn.textContent = forceRefresh ? '⏳ Refreshing from server...' : '⏳ Loading...';
+    // Check if filtersManager exists
+    if (typeof filtersManager === 'undefined' || !filtersManager) {
+      throw new Error('FiltersManager not initialized. Check browser console for errors in filters.js');
+    }
     
-    document.getElementById('daily-loading').style.display = 'block';
-    document.getElementById('daily-content').style.display = 'none';
+    if (typeof filtersManager.detectSignals !== 'function') {
+      throw new Error('FiltersManager.detectSignals is not a function. FiltersManager object: ' + JSON.stringify(Object.keys(filtersManager)));
+    }
+    
+    // Disable button and show loading
+    const refreshBtn = document.getElementById('signals-refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = forceRefresh ? '⏳ Refreshing...' : '⏳ Loading...';
+    }
+    
+    document.getElementById('signals-loading').style.display = 'block';
+    document.getElementById('signals-content').style.display = 'none';
+    
+    // Get filter values
+    const timeframe = document.getElementById('signals-timeframe').value;
+    const strategy = document.getElementById('signals-strategy').value;
+    const mcap = parseFloat(document.getElementById('signals-mcap').value) || 10000;
+    const pctDiff = parseFloat(document.getElementById('signals-pctdiff').value) || 2.5;
+    
+    console.log('Filters:', { timeframe, strategy, mcap, pctDiff });
     
     // Clear cache if force refresh
     if (forceRefresh) {
       await dataLoader.clearCache();
       dataLoader.dailyData = null;
+      dataLoader.min125Data = null;
+      dataLoader.min60Data = null;
     }
     
-    // Load data from parquet
-    const data = await dataLoader.getData('daily');
+    // Load data for selected timeframe
+    const data = await dataLoader.getData(timeframe);
     
-    // Populate filter dropdowns on first load
-    if (!filtersManager.currentFilters.daily.supertrend) {
-      filtersManager.populateFilterDropdowns('daily', data);
-    }
+    // Detect signals using new strategy logic
+    const signals = filtersManager.detectSignals(data, {
+      timeframe,
+      strategy,
+      mcap,
+      pctDiff
+    });
     
-    // Get current filter values
-    const filters = filtersManager.getCurrentFilters('daily');
-    const supertrendConfig = filters.supertrend;
+    // Render signals table
+    renderSignalsTable(signals);
     
-    // Apply filters and get signals
-    const signals = filtersManager.applyFilters(data, filters, supertrendConfig);
-    
-    // Render tables
-    renderSignalsTable('daily-long-tbody', signals.long, 'daily', supertrendConfig);
-    renderSignalsTable('daily-short-tbody', signals.short, 'daily', supertrendConfig);
-    
-    // Update counts
-    document.getElementById('daily-long-count').textContent = signals.long.length;
-    document.getElementById('daily-short-count').textContent = signals.short.length;
+    // Update count
+    document.getElementById('signals-count').textContent = signals.length;
     
     // Show content
-    document.getElementById('daily-loading').style.display = 'none';
-    document.getElementById('daily-content').style.display = 'block';
+    document.getElementById('signals-loading').style.display = 'none';
+    document.getElementById('signals-content').style.display = 'block';
     
     // Update last updated
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
-    document.getElementById('daily-last-updated').textContent = 
+    document.getElementById('signals-last-updated').textContent = 
       `Updated: ${new Date().toLocaleTimeString()} (${elapsed}s)`;
     
-    refreshBtn.disabled = false;
-    refreshBtn.textContent = '🔄 Refresh';
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = '🔄 Refresh';
+    }
     
-    console.log(`✓ Daily signals loaded in ${elapsed}s`);
+    console.log(`✓ Signals loaded in ${elapsed}s`);
     
   } catch (error) {
-    console.error('❌ Error loading daily signals:', error);
-    alert('Error loading daily signals: ' + error.message);
+    console.error('❌ Error loading signals:', error);
+    alert('Error loading signals: ' + error.message);
     
-    document.getElementById('daily-loading').style.display = 'none';
-    const refreshBtn = document.getElementById('daily-refresh-btn');
-    refreshBtn.disabled = false;
-    refreshBtn.textContent = '🔄 Refresh';
+    document.getElementById('signals-loading').style.display = 'none';
+    const refreshBtn = document.getElementById('signals-refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = '🔄 Refresh';
+    }
   } finally {
     isLoading = false;
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// 125MIN SIGNALS TAB
-// ═══════════════════════════════════════════════════════════
-
-async function load125minSignals(forceRefresh = false) {
-  if (isLoading) return;
-  isLoading = true;
+function renderSignalsTable(signals) {
+  const tbody = document.getElementById('signals-tbody');
+  tbody.innerHTML = '';
   
-  console.log('📡 Loading 125min signals...');
-  const startTime = performance.now();
-  
-  try {
-    // Disable button and show loading
-    const refreshBtn = document.getElementById('min125-refresh-btn');
-    refreshBtn.disabled = true;
-    refreshBtn.textContent = forceRefresh ? '⏳ Refreshing from server...' : '⏳ Loading...';
-    
-    document.getElementById('min125-loading').style.display = 'block';
-    document.getElementById('min125-content').style.display = 'none';
-    
-    // Clear cache if force refresh
-    if (forceRefresh) {
-      await dataLoader.clearCache();
-      dataLoader.min125Data = null;
-    }
-    
-    // Load data from parquet
-    const data = await dataLoader.getData('min125');
-    
-    // Populate filter dropdowns on first load
-    if (!filtersManager.currentFilters.min125.supertrend) {
-      filtersManager.populateFilterDropdowns('min125', data);
-    }
-    
-    // Get current filter values
-    const filters = filtersManager.getCurrentFilters('min125');
-    const supertrendConfig = filters.supertrend;
-    
-    // Apply filters and get signals
-    const signals = filtersManager.applyFilters(data, filters, supertrendConfig);
-    
-    // Render tables
-    renderSignalsTable('min125-long-tbody', signals.long, 'min125', supertrendConfig);
-    renderSignalsTable('min125-short-tbody', signals.short, 'min125', supertrendConfig);
-    
-    // Update counts
-    document.getElementById('min125-long-count').textContent = signals.long.length;
-    document.getElementById('min125-short-count').textContent = signals.short.length;
-    
-    // Show content
-    document.getElementById('min125-loading').style.display = 'none';
-    document.getElementById('min125-content').style.display = 'block';
-    
-    // Update last updated
-    const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
-    document.getElementById('min125-last-updated').textContent = 
-      `Updated: ${new Date().toLocaleTimeString()} (${elapsed}s)`;
-    
-    refreshBtn.disabled = false;
-    refreshBtn.textContent = '🔄 Refresh';
-    
-    console.log(`✓ 125min signals loaded in ${elapsed}s`);
-    
-  } catch (error) {
-    console.error('❌ Error loading 125min signals:', error);
-    alert('Error loading 125min signals: ' + error.message);
-    
-    document.getElementById('min125-loading').style.display = 'none';
-    const refreshBtn = document.getElementById('min125-refresh-btn');
-    refreshBtn.disabled = false;
-    refreshBtn.textContent = '🔄 Refresh';
-  } finally {
-    isLoading = false;
+  if (signals.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-secondary);">No signals found</td></tr>';
+    return;
   }
+  
+  signals.forEach(signal => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${signal.symbol}</strong></td>
+      <td>${signal.close}</td>
+      <td class="${signal.ltpPercent >= 0 ? 'positive' : 'negative'}">${signal.ltpPercent}%</td>
+      <td>${signal.pctDiff}%</td>
+      <td>${signal.sector}</td>
+      <td>${signal.industry}</td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -233,16 +194,10 @@ async function load125minSignals(forceRefresh = false) {
 async function loadChartsTab() {
   console.log('📊 Loading charts tab...');
   
-  // Get initial data source
   const dataSource = document.getElementById('charts-data').value || 'daily';
-  
-  // Load data for initial timeframe
   const data = await dataLoader.getData(dataSource);
   
-  // Populate all filter dropdowns (including Sector, Industry)
   await filtersManager.populateChartFilters(dataSource, data);
-  
-  // Load charts with current filters
   await loadCharts();
 }
 
@@ -254,24 +209,18 @@ async function loadCharts() {
     document.getElementById('charts-loading').style.display = 'block';
     document.getElementById('charts-content').style.display = 'none';
     
-    // Get chart filters (now includes Sector, Industry, Market Cap)
     const chartFilters = filtersManager.getCurrentFilters('charts');
-    
-    // Load data for selected timeframe
     const timeframe = chartFilters.data;
     const data = await dataLoader.getData(timeframe);
     
-    console.log('📊 Chart filters:', chartFilters);
-    
-    // Filter symbols based on chart filters (all filters from Charts tab)
     const filteredSymbols = filtersManager.filterSymbolsForCharts(data, chartFilters);
     
-    console.log(`Found ${filteredSymbols.length} symbols matching all filters`);
+    console.log(`Found ${filteredSymbols.length} symbols matching filters`);
     
-    // Render charts - pass timeframe parameter
-    await chartRenderer.renderChartsGrid(filteredSymbols, chartFilters.supertrend, timeframe);
+    if (typeof chartRenderer !== 'undefined') {
+      await chartRenderer.renderChartsGrid(filteredSymbols, chartFilters.supertrend, timeframe);
+    }
     
-    // Show content
     document.getElementById('charts-loading').style.display = 'none';
     document.getElementById('charts-content').style.display = 'block';
     
@@ -285,217 +234,25 @@ async function loadCharts() {
   }
 }
 
-// Handle chart data source change - immediately update all filter dropdowns
 async function onChartDataChange() {
   const dataSource = document.getElementById('charts-data').value;
-  
-  console.log(`📊 Charts data source changed to: ${dataSource}`);
+  console.log(`📊 Chart data changed to: ${dataSource}`);
   
   try {
-    // Load data for new data source
     const data = await dataLoader.getData(dataSource);
-    
-    // Immediately populate all filters (Supertrend + Sector + Industry)
     await filtersManager.populateChartFilters(dataSource, data);
-    
-    // Load charts with new data source
     await loadCharts();
   } catch (error) {
-    console.error('❌ Error changing data source:', error);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════
-// SYMBOLS TAB
-// ═══════════════════════════════════════════════════════════
-
-async function loadSymbolsTab() {
-  console.log('📈 Loading symbols tab...');
-  
-  if (!symbolsTabInitialized) {
-    await initializeSymbolsTab();
-    symbolsTabInitialized = true;
-  }
-}
-
-async function initializeSymbolsTab() {
-  try {
-    // Load default timeframe data (daily)
-    const timeframe = document.getElementById('symbols-timeframe').value;
-    const data = await dataLoader.getData(timeframe);
-    
-    // Populate supertrend dropdown with hardcoded values
-    populateSymbolSupertrendDropdown(timeframe);
-    
-    // Populate symbol dropdown with all unique symbols
-    populateSymbolDropdown(data);
-    
-    console.log('✓ Symbols tab initialized');
-    
-  } catch (error) {
-    console.error('❌ Error initializing symbols tab:', error);
-    alert('Error initializing symbols tab: ' + error.message);
-  }
-}
-
-function populateSymbolDropdown(data) {
-  const symbolSelect = document.getElementById('symbols-select');
-  
-  // Get unique symbols sorted alphabetically
-  const symbols = [...new Set(data.map(row => row.trading_symbol))].sort();
-  
-  console.log(`Found ${symbols.length} unique symbols`);
-  
-  // Populate dropdown
-  symbolSelect.innerHTML = '<option value="">-- Select a symbol --</option>' +
-    symbols.map(symbol => `<option value="${symbol}">${symbol}</option>`).join('');
-}
-
-function populateSymbolSupertrendDropdown(timeframe) {
-  const supertrendSelect = document.getElementById('symbols-supertrend');
-  
-  // Use hardcoded configs from filtersManager
-  const configs = filtersManager.supertrendConfigs[timeframe];
-  
-  console.log('Populating symbol supertrend (hardcoded) for:', timeframe);
-  
-  supertrendSelect.innerHTML = configs.map(config => 
-    `<option value="${config.id}">${config.label}</option>`
-  ).join('');
-}
-
-async function onSymbolTimeframeChange() {
-  const timeframe = document.getElementById('symbols-timeframe').value;
-  
-  console.log(`📈 Symbol timeframe changed to: ${timeframe}`);
-  
-  try {
-    // Load data for new timeframe
-    const data = await dataLoader.getData(timeframe);
-    
-    // Immediately update hardcoded supertrend dropdown
-    populateSymbolSupertrendDropdown(timeframe);
-    
-    // Update symbol dropdown
-    populateSymbolDropdown(data);
-    
-    // Clear current chart
-    document.getElementById('symbols-content').style.display = 'none';
-    document.getElementById('symbols-empty').style.display = 'block';
-    document.getElementById('symbols-select').value = '';
-    
-  } catch (error) {
-    console.error('❌ Error changing timeframe:', error);
+    console.error('❌ Error changing chart data:', error);
     alert('Error loading data: ' + error.message);
   }
 }
 
-async function loadSymbolChart() {
-  const symbol = document.getElementById('symbols-select').value;
-  
-  if (!symbol) {
-    document.getElementById('symbols-content').style.display = 'none';
-    document.getElementById('symbols-empty').style.display = 'block';
-    return;
-  }
-  
-  console.log(`📈 Loading chart for ${symbol}...`);
-  
-  try {
-    document.getElementById('symbols-loading').style.display = 'block';
-    document.getElementById('symbols-content').style.display = 'none';
-    document.getElementById('symbols-empty').style.display = 'none';
-    
-    // Get selected timeframe and supertrend
-    const timeframe = document.getElementById('symbols-timeframe').value;
-    const supertrendConfig = document.getElementById('symbols-supertrend').value;
-    
-    // Load data
-    const data = await dataLoader.getData(timeframe);
-    
-    // Get candles for this symbol
-    const candles = dataLoader.getSymbolCandles(data, symbol);
-    
-    if (candles.length === 0) {
-      alert(`No data found for ${symbol}`);
-      document.getElementById('symbols-loading').style.display = 'none';
-      document.getElementById('symbols-empty').style.display = 'block';
-      return;
-    }
-    
-    // Get latest candle for direction badge
-    const latestCandle = candles[candles.length - 1];
-    const directionCol = `direction_${supertrendConfig}`;
-    const direction = latestCandle[directionCol];
-    
-    // Update chart title and badge
-    document.getElementById('symbols-chart-title').textContent = symbol;
-    const badge = document.getElementById('symbols-chart-badge');
-    if (direction === -1) {
-      badge.textContent = 'Long';
-      badge.className = 'chart-type-badge long';
-      badge.style.display = 'inline-block';
-    } else if (direction === 1) {
-      badge.textContent = 'Short';
-      badge.className = 'chart-type-badge short';
-      badge.style.display = 'inline-block';
-    } else {
-      badge.style.display = 'none';
-    }
-    
-    // Render chart - UPDATED: Pass timeframe parameter
-    chartRenderer.renderChart('symbols-chart', symbol, candles, supertrendConfig, direction, timeframe);
-    
-    // Show content
-    document.getElementById('symbols-loading').style.display = 'none';
-    document.getElementById('symbols-content').style.display = 'block';
-    
-    console.log(`✓ Chart loaded for ${symbol}`);
-    
-  } catch (error) {
-    console.error('❌ Error loading symbol chart:', error);
-    alert('Error loading chart: ' + error.message);
-    document.getElementById('symbols-loading').style.display = 'none';
-    document.getElementById('symbols-empty').style.display = 'block';
-  }
-}
-
 // ═══════════════════════════════════════════════════════════
-// TABLE RENDERING
+// WATCHLIST TAB
 // ═══════════════════════════════════════════════════════════
 
-function renderSignalsTable(tbodyId, signals, sheet, supertrend) {
-  const tbody = document.getElementById(tbodyId);
-  tbody.innerHTML = '';
-  
-  if (!signals.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-secondary);">No signals found</td></tr>';
-    return;
-  }
-  
-  signals.forEach(signal => {
-    const type = signal.direction === -1 ? 'Long' : 'Short';
-    const isInWatchlist = checkIfInWatchlist(signal.symbol, sheet, supertrend, type);
-    
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="checkbox-cell">
-        <input type="checkbox" ${isInWatchlist ? 'checked' : ''} 
-               onchange="toggleWatchlist(this, '${signal.symbol}', '${sheet}', '${supertrend}', '${type}', '${signal.pctDiff}', '${signal.flatbase}')">
-      </td>
-      <td><strong>${signal.symbol}</strong></td>
-      <td>${signal.close}</td>
-      <td class="${signal.ltpPercent >= 0 ? 'positive' : 'negative'}">${signal.ltpPercent}%</td>
-      <td>${signal.pctDiff}</td>
-      <td>${signal.flatbase}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-// ═══════════════════════════════════════════════════════════
-// WATCHLIST MANAGEMENT (Using existing Apps Script)
-// ═══════════════════════════════════════════════════════════
+let watchlistData = [];
 
 async function loadWatchlist() {
   console.log('📋 Loading watchlist...');
@@ -515,16 +272,7 @@ async function loadWatchlist() {
     
   } catch (error) {
     console.error('❌ Error loading watchlist:', error);
-  }
-}
-
-async function loadWatchlistSilent() {
-  try {
-    const response = await fetch(`${CONFIG.APPS_SCRIPT_URL}?action=getWatchlist`);
-    const data = await response.json();
-    watchlistData = data;
-  } catch (error) {
-    console.error('❌ Error loading watchlist:', error);
+    alert('Error loading watchlist: ' + error.message);
   }
 }
 
@@ -543,69 +291,32 @@ function renderWatchlist() {
   watchlistData.forEach(item => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="checkbox-cell">
-        <input type="checkbox" checked 
-               onchange="removeFromWatchlistUI(this, '${item.symbol}', '${item.sheet}', '${item.supertrend}', '${item.type}')">
-      </td>
       <td><strong>${item.symbol}</strong></td>
-      <td>${item.sheet}</td>
-      <td>${item.supertrend}</td>
-      <td>${item.type}</td>
-      <td>${item.pct}</td>
-      <td>${item.flatbase}</td>
-      <td>${item.dateAdded ? new Date(item.dateAdded).toLocaleDateString() : ''}</td>
+      <td>${item.sheet || 'N/A'}</td>
+      <td>${item.supertrend || 'N/A'}</td>
+      <td>${item.type || 'N/A'}</td>
+      <td>${item.pct || 'N/A'}</td>
+      <td>${item.flatbase || 'N/A'}</td>
+      <td>${item.dateAdded || 'N/A'}</td>
+      <td><button class="remove-btn" onclick="removeFromWatchlist('${item.symbol}')">Remove</button></td>
     `;
     tbody.appendChild(tr);
   });
 }
 
-function checkIfInWatchlist(symbol, sheet, supertrend, type) {
-  return watchlistData.some(item => 
-    item.symbol === symbol && 
-    item.sheet === sheet && 
-    item.supertrend === supertrend && 
-    item.type === type
-  );
-}
-
-async function toggleWatchlist(checkbox, symbol, sheet, supertrend, type, pct, flatbase) {
-  if (checkbox.checked) {
-    await addToWatchlist(symbol, sheet, supertrend, type, pct, flatbase);
-  } else {
-    await removeFromWatchlist(symbol, sheet, supertrend, type);
-  }
-}
-
-async function removeFromWatchlistUI(checkbox, symbol, sheet, supertrend, type) {
-  if (!checkbox.checked) {
-    await removeFromWatchlist(symbol, sheet, supertrend, type);
-    setTimeout(() => {
-      loadWatchlist();
-      if (currentTab === 'daily') loadDailySignals();
-      if (currentTab === '125min') load125minSignals();
-    }, 500);
-  }
-}
-
-async function addToWatchlist(symbol, sheet, supertrend, type, pct, flatbase) {
+async function removeFromWatchlist(symbol) {
   try {
-    const url = `${CONFIG.APPS_SCRIPT_URL}?action=addToWatchlist&symbol=${encodeURIComponent(symbol)}&sheet=${encodeURIComponent(sheet)}&supertrend=${encodeURIComponent(supertrend)}&type=${encodeURIComponent(type)}&pct=${pct}&flatbase=${flatbase}`;
-    await fetch(url);
-    setTimeout(() => loadWatchlistSilent(), 500);
-    console.log('✅ Added to watchlist:', symbol);
+    const response = await fetch(CONFIG.APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'remove', symbol })
+    });
+    
+    if (response.ok) {
+      await loadWatchlist();
+    }
   } catch (error) {
-    console.error('❌ Error adding:', error);
-  }
-}
-
-async function removeFromWatchlist(symbol, sheet, supertrend, type) {
-  try {
-    const url = `${CONFIG.APPS_SCRIPT_URL}?action=removeFromWatchlist&symbol=${encodeURIComponent(symbol)}&sheet=${encodeURIComponent(sheet)}&supertrend=${encodeURIComponent(supertrend)}&type=${encodeURIComponent(type)}`;
-    await fetch(url);
-    setTimeout(() => loadWatchlistSilent(), 500);
-    console.log('✅ Removed from watchlist:', symbol);
-  } catch (error) {
-    console.error('❌ Error removing:', error);
+    console.error('Error removing from watchlist:', error);
+    alert('Error removing from watchlist');
   }
 }
 
@@ -613,16 +324,24 @@ async function removeFromWatchlist(symbol, sheet, supertrend, type) {
 // INITIALIZATION
 // ═══════════════════════════════════════════════════════════
 
-window.onload = function() {
-  console.log('🚀 Signal Tracker initialized');
-  initTheme();
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('🚀 App initialized');
   
-  // Check if Supabase URL is configured
-  if (CONFIG.SUPABASE_URL === 'YOUR_SUPABASE_URL_HERE') {
-    alert('⚠️ Please configure your SUPABASE_URL in js/config.js');
+  // Verify required objects are loaded
+  if (typeof CONFIG === 'undefined') {
+    console.error('❌ CONFIG not loaded! Ensure config.js is included before main.js');
+    return;
+  }
+  if (typeof dataLoader === 'undefined') {
+    console.error('❌ dataLoader not loaded! Ensure dataLoader.js is included before main.js');
+    return;
+  }
+  if (typeof filtersManager === 'undefined') {
+    console.error('❌ filtersManager not loaded! Ensure filters.js is included before main.js');
     return;
   }
   
-  // Load initial tab
-  loadDailySignals();
-};
+  console.log('✅ All dependencies loaded');
+  initTheme();
+  loadSignals(); // Load signals tab by default
+});
