@@ -28,6 +28,12 @@ API_CONFIG = {
 
 # ==================== TIMEFRAME CONFIGURATION ====================
 TIMEFRAME_CONFIG = {
+    '60min': {
+        'unit': 'minutes',
+        'interval': 60,
+        'days_history': 60,
+        'candles_per_day': 7
+    },
     '125min': {
         'unit': 'minutes',
         'interval': 125,
@@ -52,12 +58,29 @@ SUPERTREND_CONFIGS_125M = [
         'description': 'Medium-term reference with SMA'
     },
     {
-        'name': 'ST_125m_hl2_15',
-        'use_sma': False,
-        'atr_period': 15,
+        'name': 'ST_125m_sma3',
+        'use_sma': True,
+        'atr_period': 3,
         'atr_multiplier': 2.0,
-        'description': 'Medium-term reference without SMA'
+        'description': 'Medium-term reference with SMA'
+    }
+]
+
+SUPERTREND_CONFIGS_60M = [
+    {
+        'name': 'ST_60m_sma35',
+        'use_sma': True,
+        'atr_period': 35,
+        'atr_multiplier': 2.0,
+        'description': 'Long-term reference with SMA'
     },
+    {
+        'name': 'ST_60m_sma7',
+        'use_sma': True,
+        'atr_period': 7,
+        'atr_multiplier': 2.0,
+        'description': 'Medium-term reference with SMA'
+    }
 ]
 
 SUPERTREND_CONFIGS_DAILY = [
@@ -79,6 +102,7 @@ SUPERTREND_CONFIGS_DAILY = [
 
 # ==================== DATA RETENTION SETTINGS ====================
 PARQUET_RETENTION = {
+    '60min': 60,
     '125min': 60,
     'daily': 60
 }
@@ -87,6 +111,7 @@ PARQUET_RETENTION = {
 SUPABASE_CONFIG = {
     'bucket_name': 'st-swing-bucket',
     'file_names': {
+        '60min': '60min.parquet',
         '125min': '125min.parquet',
         'daily': 'daily.parquet'
     }
