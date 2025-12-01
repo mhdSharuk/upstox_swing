@@ -1,48 +1,37 @@
 /**
- * Charts Manager Module - WITH LAZY LOADING
- * Renders OHLC candles with larger/shorter supertrends and bands
- * Uses TradingView Lightweight Charts library
- * 
- * LAZY LOADING: Loads 20 charts initially, then 10 more on scroll
+ * Charts Manager Module - amCharts Version
+ * Same as Lightweight Charts but with STEP LINE supertrends
+ * Lazy loading: 20 initial, 10 more on scroll
  */
 
 class ChartsManager {
   constructor() {
     this.charts = new Map(); // Store chart instances
-    this.currentStrategy = 'vs'; // Default strategy
-    this.allSignals = []; // Store all signals for lazy loading
-    this.dataBySymbol = null; // Cache data by symbol
-    this.loadedCount = 0; // Track how many charts are loaded
-    this.isLoadingMore = false; // Prevent multiple simultaneous loads
-    this.INITIAL_BATCH = 20; // Load first 20 charts
-    this.LOAD_MORE_BATCH = 10; // Load 10 more on scroll
+    this.currentStrategy = 'vs';
+    this.allSignals = [];
+    this.dataBySymbol = null;
+    this.loadedCount = 0;
+    this.isLoadingMore = false;
+    this.INITIAL_BATCH = 20;
+    this.LOAD_MORE_BATCH = 10;
   }
 
-  /**
-   * Render charts for selected strategy with lazy loading
-   * @param {string} strategy - 'vs' or 'vb'
-   */
   async renderCharts(strategy) {
     this.currentStrategy = strategy;
-    
     console.log('📊 Rendering charts for strategy:', strategy);
     
-    // Show loading
     document.getElementById('charts-loading').style.display = 'block';
     document.getElementById('charts-grid').innerHTML = '';
     
-    // Clear existing charts and state
     this.clearAllCharts();
     this.loadedCount = 0;
     this.allSignals = [];
     
     try {
-      // Ensure data is loaded
       if (!dataLoader.data) {
         await dataLoader.getData();
       }
       
-      // Get filtered signals based on strategy
       let signals;
       if (strategy === 'vs') {
         const pctDiffFilter = parseFloat(document.getElementById('pctdiff-filter').value) || 2.5;
@@ -59,17 +48,12 @@ class ChartsManager {
         return;
       }
       
-      // Store signals and data for lazy loading
       this.allSignals = signals;
       this.dataBySymbol = dataLoader.getDataBySymbol();
       
-      // Hide initial loading
       document.getElementById('charts-loading').style.display = 'none';
       
-      // Load first batch (20 charts)
       this.loadNextBatch(this.INITIAL_BATCH);
-      
-      // Setup scroll listener for infinite scroll
       this.setupScrollListener();
       
       console.log(`✓ Initial batch loaded (${Math.min(this.INITIAL_BATCH, signals.length)} charts)`);
@@ -81,20 +65,13 @@ class ChartsManager {
     }
   }
 
-  /**
-   * Load next batch of charts
-   * @param {number} count - Number of charts to load
-   */
   loadNextBatch(count) {
     const chartsGrid = document.getElementById('charts-grid');
-    
-    // Calculate range
     const startIndex = this.loadedCount;
     const endIndex = Math.min(startIndex + count, this.allSignals.length);
     
     console.log(`Loading charts ${startIndex} to ${endIndex - 1}`);
     
-    // Load charts in batch
     for (let i = startIndex; i < endIndex; i++) {
       const signal = this.allSignals[i];
       const symbol = signal.symbol;
@@ -105,7 +82,6 @@ class ChartsManager {
         continue;
       }
       
-      // Create chart container
       const chartWrapper = document.createElement('div');
       chartWrapper.className = 'chart-container';
       chartWrapper.innerHTML = `
@@ -118,16 +94,13 @@ class ChartsManager {
       
       chartsGrid.appendChild(chartWrapper);
       
-      // Render the chart with slight delay to prevent UI freeze
       setTimeout(() => {
         this.renderSingleChart(`chart-${i}`, symbol, candles);
       }, 50 * (i - startIndex));
     }
     
-    // Update loaded count
     this.loadedCount = endIndex;
     
-    // Remove loading indicator if all charts are loaded
     if (this.loadedCount >= this.allSignals.length) {
       this.removeLoadingIndicator();
       console.log(`✓ All ${this.loadedCount} charts loaded`);
@@ -136,40 +109,25 @@ class ChartsManager {
     }
   }
 
-  /**
-   * Setup scroll listener for infinite scroll
-   */
   setupScrollListener() {
-    // Remove existing listener if any
     if (this.scrollListener) {
       window.removeEventListener('scroll', this.scrollListener);
     }
     
-    // Create scroll listener
     this.scrollListener = () => {
-      // Check if user scrolled near bottom (within 500px)
       const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
       const windowHeight = window.innerHeight;
       const documentHeight = document.documentElement.scrollHeight;
-      
       const distanceFromBottom = documentHeight - (scrollTop + windowHeight);
       
-      // Load more if:
-      // 1. Within 500px of bottom
-      // 2. Not currently loading
-      // 3. More charts available
       if (distanceFromBottom < 500 && !this.isLoadingMore && this.loadedCount < this.allSignals.length) {
         this.loadMore();
       }
     };
     
-    // Attach listener
     window.addEventListener('scroll', this.scrollListener);
   }
 
-  /**
-   * Load more charts when scrolling
-   */
   async loadMore() {
     if (this.isLoadingMore || this.loadedCount >= this.allSignals.length) {
       return;
@@ -177,26 +135,15 @@ class ChartsManager {
     
     this.isLoadingMore = true;
     console.log('📥 Loading more charts...');
-    
-    // Show loading indicator
     this.showLoadingIndicator();
     
-    // Small delay for smooth UX
     await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Load next batch (10 charts)
     this.loadNextBatch(this.LOAD_MORE_BATCH);
-    
     this.isLoadingMore = false;
   }
 
-  /**
-   * Show loading indicator at bottom of grid
-   */
   showLoadingIndicator() {
-    // Remove existing indicator
     this.removeLoadingIndicator();
-    
     const chartsGrid = document.getElementById('charts-grid');
     const indicator = document.createElement('div');
     indicator.id = 'charts-load-more';
@@ -207,26 +154,14 @@ class ChartsManager {
         <div>Loading more charts...</div>
       </div>
     `;
-    
     chartsGrid.appendChild(indicator);
   }
 
-  /**
-   * Remove loading indicator
-   */
   removeLoadingIndicator() {
     const indicator = document.getElementById('charts-load-more');
-    if (indicator) {
-      indicator.remove();
-    }
+    if (indicator) indicator.remove();
   }
 
-  /**
-   * Render a single chart with OHLC + supertrends + bands
-   * @param {string} containerId - DOM element ID
-   * @param {string} symbol - Trading symbol
-   * @param {Array} candles - Array of candle data
-   */
   renderSingleChart(containerId, symbol, candles) {
     const container = document.getElementById(containerId);
     if (!container) {
@@ -238,379 +173,273 @@ class ChartsManager {
     const theme = document.documentElement.getAttribute('data-theme') || 'light';
     const isDark = theme === 'dark';
 
+    // Create root
+    const root = am5.Root.new(container);
+
+    // Set theme
+    if (isDark) {
+      root.setThemes([am5themes_Dark.new(root)]);
+    } else {
+      root.setThemes([am5themes_Animated.new(root)]);
+    }
+
     // Create chart
-    const chart = LightweightCharts.createChart(container, {
-      width: container.clientWidth,
-      height: 400,
-      layout: {
-        background: { color: isDark ? '#161b22' : '#ffffff' },
-        textColor: isDark ? '#c9d1d9' : '#202124',
-      },
-      grid: {
-        vertLines: { visible: false },
-        horzLines: { color: isDark ? '#30363d' : '#f1f3f4' },
-      },
-      crosshair: {
-        mode: LightweightCharts.CrosshairMode.Normal,
-      },
-      rightPriceScale: {
-        borderColor: isDark ? '#30363d' : '#dadce0',
-        autoScale: true,
-        scaleMargins: {
-          top: 0.1,
-          bottom: 0.1,
-        },
-        visible: true,
-        entireTextOnly: true,
-      },
-      timeScale: {
-        borderColor: isDark ? '#30363d' : '#dadce0',
-        timeVisible: true,
-        secondsVisible: false,
-        rightOffset: 20,
-        barSpacing: 12,
-        minBarSpacing: 0.5,
-        fixLeftEdge: false,
-        fixRightEdge: false,
-      },
-      localization: {
-        timeFormatter: (time) => {
-          const date = new Date(time * 1000);
-          const istOffset = 5.5 * 60 * 60 * 1000;
-          const istDate = new Date(date.getTime() + istOffset);
-          
-          const day = String(istDate.getUTCDate()).padStart(2, '0');
-          const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
-          const year = String(istDate.getUTCFullYear()).slice(-2);
-          const hours = String(istDate.getUTCHours()).padStart(2, '0');
-          const minutes = String(istDate.getUTCMinutes()).padStart(2, '0');
-          
-          return `${day}/${month}/${year} ${hours}:${minutes}`;
-        },
-      },
-    });
+    const chart = root.container.children.push(
+      am5xy.XYChart.new(root, {
+        panX: true,
+        panY: true,
+        wheelX: "panX",
+        wheelY: "zoomX",
+        pinchZoomX: true,
+        paddingLeft: 0,
+        paddingRight: 20
+      })
+    );
+
+    // Create axes
+    const xAxis = chart.xAxes.push(
+      am5xy.DateAxis.new(root, {
+        baseInterval: { timeUnit: "minute", count: 125 },
+        renderer: am5xy.AxisRendererX.new(root, {}),
+        tooltip: am5.Tooltip.new(root, {})
+      })
+    );
+
+    const yAxis = chart.yAxes.push(
+      am5xy.ValueAxis.new(root, {
+        renderer: am5xy.AxisRendererY.new(root, {})
+      })
+    );
 
     // Prepare candlestick data
-    const candlestickData = candles.map(candle => ({
-      time: Math.floor(new Date(candle[CONFIG.COLUMNS.TIMESTAMP]).getTime() / 1000),
+    const chartData = candles.map(candle => ({
+      date: new Date(candle[CONFIG.COLUMNS.TIMESTAMP]).getTime(),
       open: parseFloat(candle[CONFIG.COLUMNS.OPEN]),
       high: parseFloat(candle[CONFIG.COLUMNS.HIGH]),
       low: parseFloat(candle[CONFIG.COLUMNS.LOW]),
       close: parseFloat(candle[CONFIG.COLUMNS.CLOSE]),
-    })).filter(d => !isNaN(d.time) && !isNaN(d.open));
+      st_larger: parseFloat(candle[CONFIG.COLUMNS.SUPERTREND_LARGER]),
+      st_shorter: parseFloat(candle[CONFIG.COLUMNS.SUPERTREND_SHORTER]),
+      dir_larger: candle[CONFIG.COLUMNS.DIRECTION_LARGER],
+      dir_shorter: candle[CONFIG.COLUMNS.DIRECTION_SHORTER],
+      upper_band: parseFloat(candle[CONFIG.COLUMNS.UPPERBAND_SHORTER]),
+      lower_band: parseFloat(candle[CONFIG.COLUMNS.LOWERBAND_SHORTER])
+    }));
 
     // Add candlestick series
-    const candlestickSeries = chart.addCandlestickSeries({
-      upColor: '#089981',
-      downColor: '#f23645',
-      borderDownColor: '#f23645',
-      borderUpColor: '#089981',
-      wickDownColor: '#f23645',
-      wickUpColor: '#089981',
-      lastValueVisible: true,
-      priceLineVisible: false,
-    });
-    candlestickSeries.setData(candlestickData);
+    const candlestickSeries = chart.series.push(
+      am5xy.CandlestickSeries.new(root, {
+        name: symbol,
+        xAxis: xAxis,
+        yAxis: yAxis,
+        valueYField: "close",
+        openValueYField: "open",
+        lowValueYField: "low",
+        highValueYField: "high",
+        valueXField: "date",
+        tooltip: am5.Tooltip.new(root, {
+          labelText: "O: {openValueY}\nH: {highValueY}\nL: {lowValueY}\nC: {valueY}"
+        })
+      })
+    );
 
-    // Add Larger Supertrend (sma15) with color based on direction
-    this.addSupertrendSeries(chart, candles, 'LARGER', isDark);
+    candlestickSeries.data.setAll(chartData);
 
-    // Add Shorter Supertrend (sma3) with color based on direction
-    this.addSupertrendSeries(chart, candles, 'SHORTER', isDark);
+    // Add supertrends as STEP LINES
+    this.addSupertrendStepLine(root, chart, xAxis, yAxis, chartData, 'LARGER');
+    this.addSupertrendStepLine(root, chart, xAxis, yAxis, chartData, 'SHORTER');
 
-    // Add Bands (upperBand and lowerBand) with opacity based on shorter direction
-    this.addBandSeries(chart, candles, isDark);
+    // Add bands
+    this.addBandLines(root, chart, xAxis, yAxis, chartData);
 
-    // Auto-zoom to show last 20 candles with right padding
-    if (candlestickData.length > 0) {
-      setTimeout(() => {
-        const totalCandles = candlestickData.length;
-        const showCandles = 20;
-        const lastIndex = totalCandles - 1;
-        const firstVisibleIndex = Math.max(0, lastIndex - showCandles + 1);
-        
-        chart.timeScale().setVisibleLogicalRange({
-          from: firstVisibleIndex - 0.5,
-          to: lastIndex + 5,
-        });
-      }, 100);
+    // Add cursor
+    chart.set("cursor", am5xy.XYCursor.new(root, {
+      behavior: "zoomX"
+    }));
+
+    // Zoom to last 20 candles
+    const dataLength = chartData.length;
+    if (dataLength > 20) {
+      const startIndex = dataLength - 20;
+      xAxis.zoomToIndexes(startIndex, dataLength - 1);
     }
 
     // Store chart instance
-    this.charts.set(containerId, chart);
-
-    // Handle window resize
-    const resizeObserver = new ResizeObserver(entries => {
-      if (entries.length === 0 || entries[0].target !== container) return;
-      const newRect = entries[0].contentRect;
-      chart.applyOptions({ 
-        width: newRect.width,
-        height: 400
-      });
-    });
-    resizeObserver.observe(container);
+    this.charts.set(containerId, { root, chart });
   }
 
-  /**
-   * Add supertrend series (larger or shorter) with dynamic coloring
-   * Step line changes values between candles (at candle open), not on the candle itself
-   * @param {Object} chart - Chart instance
-   * @param {Array} candles - Candle data
-   * @param {string} type - 'LARGER' or 'SHORTER'
-   * @param {boolean} isDark - Dark theme flag
-   */
-  addSupertrendSeries(chart, candles, type, isDark) {
-    const stColumn = type === 'LARGER' ? CONFIG.COLUMNS.SUPERTREND_LARGER : CONFIG.COLUMNS.SUPERTREND_SHORTER;
-    const dirColumn = type === 'LARGER' ? CONFIG.COLUMNS.DIRECTION_LARGER : CONFIG.COLUMNS.DIRECTION_SHORTER;
+  addSupertrendStepLine(root, chart, xAxis, yAxis, data, type) {
+    const valueField = type === 'LARGER' ? 'st_larger' : 'st_shorter';
+    const dirField = type === 'LARGER' ? 'dir_larger' : 'dir_shorter';
 
-    // Group data by direction to create colored segments
-    let currentDirection = null;
+    // Group by direction
+    let segments = [];
     let currentSegment = [];
-    const segments = [];
-    let prevValue = null;
+    let currentDir = null;
 
-    candles.forEach((candle, index) => {
-      const time = Math.floor(new Date(candle[CONFIG.COLUMNS.TIMESTAMP]).getTime() / 1000);
-      const value = parseFloat(candle[stColumn]);
-      const direction = candle[dirColumn];
+    data.forEach((point, index) => {
+      if (isNaN(point[valueField])) return;
 
-      if (isNaN(value) || value === null || value === undefined) return;
-
-      if (currentDirection === null || currentDirection !== direction) {
-        // Direction changed
+      if (currentDir === null || currentDir !== point[dirField]) {
         if (currentSegment.length > 0) {
-          segments.push({
-            data: [...currentSegment],
-            direction: currentDirection
-          });
-          // Start new segment with connection point
+          segments.push({ data: currentSegment, direction: currentDir });
           currentSegment = [currentSegment[currentSegment.length - 1]];
         }
-        currentDirection = direction;
+        currentDir = point[dirField];
       }
 
-      // Create step effect: horizontal first, then vertical at next candle
-      if (prevValue !== null && prevValue !== value && currentSegment.length > 0) {
-        currentSegment.push({ time, value: prevValue });
-      }
-      
-      currentSegment.push({ time, value });
-      prevValue = value;
+      currentSegment.push({
+        date: point.date,
+        value: point[valueField]
+      });
 
-      // Last point
-      if (index === candles.length - 1 && currentSegment.length > 0) {
-        segments.push({
-          data: currentSegment,
-          direction: currentDirection
-        });
+      if (index === data.length - 1 && currentSegment.length > 0) {
+        segments.push({ data: currentSegment, direction: currentDir });
       }
     });
 
-    // Render each segment with appropriate color
+    // Render segments with step lines
     segments.forEach(segment => {
       let color;
-      
       if (type === 'LARGER') {
-        // Larger ST: Green when direction=-1, Red when direction=1
-        color = segment.direction === -1 ? '#34a853' : '#f23645';
+        color = segment.direction === -1 ? am5.color(0x34a853) : am5.color(0xf23645);
       } else {
-        // Shorter ST: Bright Yellow when direction=-1, Blue when direction=1
-        color = segment.direction === -1 ? '#FFD700' : '#1a73e8';
+        color = segment.direction === -1 ? am5.color(0xFFD700) : am5.color(0x1a73e8);
       }
 
-      const lineSeries = chart.addLineSeries({
-        color: color,
-        lineWidth: 2,
-        lineStyle: LightweightCharts.LineStyle.Solid,
-        lineType: LightweightCharts.LineType.Simple,
-        crosshairMarkerVisible: true,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      });
+      const series = chart.series.push(
+        am5xy.StepLineSeries.new(root, {
+          name: `${type}_ST`,
+          xAxis: xAxis,
+          yAxis: yAxis,
+          valueYField: "value",
+          valueXField: "date",
+          stroke: color,
+          strokeWidth: 2,
+          noRisers: false, // Show vertical steps
+          connect: false
+        })
+      );
 
-      lineSeries.setData(segment.data);
+      series.data.setAll(segment.data);
+      series.strokes.template.setAll({
+        strokeWidth: 2
+      });
     });
   }
 
-  /**
-   * Add band series (upperBand and lowerBand) with opacity based on shorter direction
-   * @param {Object} chart - Chart instance
-   * @param {Array} candles - Candle data
-   * @param {boolean} isDark - Dark theme flag
-   */
-  addBandSeries(chart, candles, isDark) {
-    // Process upperBand
-    let currentOpacity = null;
+  addBandLines(root, chart, xAxis, yAxis, data) {
+    // Upper band segments
+    let upperSegments = [];
     let currentSegment = [];
-    const upperSegments = [];
-    let prevValue = null;
+    let currentOpacity = null;
 
-    candles.forEach((candle, index) => {
-      const time = Math.floor(new Date(candle[CONFIG.COLUMNS.TIMESTAMP]).getTime() / 1000);
-      const value = parseFloat(candle[CONFIG.COLUMNS.UPPERBAND_SHORTER]);
-      const direction = candle[CONFIG.COLUMNS.DIRECTION_SHORTER];
+    data.forEach((point, index) => {
+      if (isNaN(point.upper_band)) return;
 
-      if (isNaN(value) || value === null || value === undefined) return;
-
-      const opacity = direction === 1 ? 1.0 : 0.5;
+      const opacity = point.dir_shorter === 1 ? 1.0 : 0.5;
 
       if (currentOpacity === null || currentOpacity !== opacity) {
         if (currentSegment.length > 0) {
-          upperSegments.push({
-            data: [...currentSegment],
-            opacity: currentOpacity
-          });
+          upperSegments.push({ data: currentSegment, opacity: currentOpacity });
           currentSegment = [currentSegment[currentSegment.length - 1]];
         }
         currentOpacity = opacity;
-        prevValue = null;
       }
 
-      if (prevValue !== null && prevValue !== value && currentSegment.length > 0) {
-        currentSegment.push({ time, value: prevValue });
-      }
-      
-      currentSegment.push({ time, value });
-      prevValue = value;
+      currentSegment.push({
+        date: point.date,
+        value: point.upper_band
+      });
 
-      if (index === candles.length - 1 && currentSegment.length > 0) {
-        upperSegments.push({
-          data: currentSegment,
-          opacity: currentOpacity
-        });
+      if (index === data.length - 1 && currentSegment.length > 0) {
+        upperSegments.push({ data: currentSegment, opacity: currentOpacity });
       }
     });
 
-    // Render upperBand segments
     upperSegments.forEach(segment => {
-      const alpha = Math.round(segment.opacity * 255).toString(16).padStart(2, '0');
-      const color = `#1a73e8${alpha}`;
-
-      const lineSeries = chart.addLineSeries({
-        color: color,
-        lineWidth: 1,
-        lineStyle: LightweightCharts.LineStyle.Solid,
-        lineType: LightweightCharts.LineType.Simple,
-        crosshairMarkerVisible: false,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      });
-
-      lineSeries.setData(segment.data);
+      const series = chart.series.push(
+        am5xy.StepLineSeries.new(root, {
+          xAxis: xAxis,
+          yAxis: yAxis,
+          valueYField: "value",
+          valueXField: "date",
+          stroke: am5.color(0x1a73e8),
+          strokeWidth: 1,
+          strokeOpacity: segment.opacity,
+          noRisers: false
+        })
+      );
+      series.data.setAll(segment.data);
     });
 
-    // Process lowerBand
-    currentOpacity = null;
+    // Lower band segments
+    let lowerSegments = [];
     currentSegment = [];
-    const lowerSegments = [];
-    prevValue = null;
+    currentOpacity = null;
 
-    candles.forEach((candle, index) => {
-      const time = Math.floor(new Date(candle[CONFIG.COLUMNS.TIMESTAMP]).getTime() / 1000);
-      const value = parseFloat(candle[CONFIG.COLUMNS.LOWERBAND_SHORTER]);
-      const direction = candle[CONFIG.COLUMNS.DIRECTION_SHORTER];
+    data.forEach((point, index) => {
+      if (isNaN(point.lower_band)) return;
 
-      if (isNaN(value) || value === null || value === undefined) return;
-
-      const opacity = direction === 1 ? 0.5 : 1.0;
+      const opacity = point.dir_shorter === 1 ? 0.5 : 1.0;
 
       if (currentOpacity === null || currentOpacity !== opacity) {
         if (currentSegment.length > 0) {
-          lowerSegments.push({
-            data: [...currentSegment],
-            opacity: currentOpacity
-          });
+          lowerSegments.push({ data: currentSegment, opacity: currentOpacity });
           currentSegment = [currentSegment[currentSegment.length - 1]];
         }
         currentOpacity = opacity;
-        prevValue = null;
       }
 
-      if (prevValue !== null && prevValue !== value && currentSegment.length > 0) {
-        currentSegment.push({ time, value: prevValue });
-      }
-      
-      currentSegment.push({ time, value });
-      prevValue = value;
+      currentSegment.push({
+        date: point.date,
+        value: point.lower_band
+      });
 
-      if (index === candles.length - 1 && currentSegment.length > 0) {
-        lowerSegments.push({
-          data: currentSegment,
-          opacity: currentOpacity
-        });
+      if (index === data.length - 1 && currentSegment.length > 0) {
+        lowerSegments.push({ data: currentSegment, opacity: currentOpacity });
       }
     });
 
-    // Render lowerBand segments
     lowerSegments.forEach(segment => {
-      const alpha = Math.round(segment.opacity * 255).toString(16).padStart(2, '0');
-      const color = `#FFD700${alpha}`;
-
-      const lineSeries = chart.addLineSeries({
-        color: color,
-        lineWidth: 1,
-        lineStyle: LightweightCharts.LineStyle.Solid,
-        lineType: LightweightCharts.LineType.Simple,
-        crosshairMarkerVisible: false,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      });
-
-      lineSeries.setData(segment.data);
+      const series = chart.series.push(
+        am5xy.StepLineSeries.new(root, {
+          xAxis: xAxis,
+          yAxis: yAxis,
+          valueYField: "value",
+          valueXField: "date",
+          stroke: am5.color(0xFFD700),
+          strokeWidth: 1,
+          strokeOpacity: segment.opacity,
+          noRisers: false
+        })
+      );
+      series.data.setAll(segment.data);
     });
   }
 
-  /**
-   * Clear all chart instances
-   */
   clearAllCharts() {
-    this.charts.forEach(chart => {
+    this.charts.forEach(({ root }) => {
       try {
-        chart.remove();
+        root.dispose();
       } catch (error) {
-        console.warn('Error removing chart:', error);
+        console.warn('Error disposing chart:', error);
       }
     });
     this.charts.clear();
     
-    // Remove scroll listener
     if (this.scrollListener) {
       window.removeEventListener('scroll', this.scrollListener);
       this.scrollListener = null;
     }
   }
 
-  /**
-   * Update charts theme when theme changes
-   */
   updateChartsTheme() {
-    const theme = document.documentElement.getAttribute('data-theme') || 'light';
-    const isDark = theme === 'dark';
-
-    this.charts.forEach(chart => {
-      try {
-        chart.applyOptions({
-          layout: {
-            background: { color: isDark ? '#161b22' : '#ffffff' },
-            textColor: isDark ? '#c9d1d9' : '#202124',
-          },
-          grid: {
-            horzLines: { color: isDark ? '#30363d' : '#f1f3f4' },
-          },
-          rightPriceScale: {
-            borderColor: isDark ? '#30363d' : '#dadce0',
-          },
-          timeScale: {
-            borderColor: isDark ? '#30363d' : '#dadce0',
-          },
-        });
-      } catch (error) {
-        console.warn('Error updating chart theme:', error);
-      }
-    });
+    // Theme changes require recreation in amCharts
+    console.log('Theme changed - refresh page to see updated charts');
   }
 }
 
 // Create global instance
 const chartsManager = new ChartsManager();
-console.log('✅ ChartsManager initialized with lazy loading (20 initial, 10 per scroll)');
+console.log('✅ ChartsManager initialized (amCharts with step lines)');
