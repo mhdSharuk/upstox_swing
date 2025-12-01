@@ -22,24 +22,24 @@ API_CONFIG = {
 }
 
 TIMEFRAME_CONFIG = {
-    '60min': {
-        'unit': 'minutes',
-        'interval': 60,
-        'days_history': 60,
-        'candles_per_day': 7
-    },
+    # '60min': {
+    #     'unit': 'minutes',
+    #     'interval': 60,
+    #     'days_history': 60,
+    #     'candles_per_day': 7
+    # },
     '125min': {
         'unit': 'minutes',
         'interval': 125,
         'days_history': 90,
         'candles_per_day': 3
     },
-    'daily': {
-        'unit': 'days',
-        'interval': 1,
-        'days_history': 365,
-        'candles_per_year': 252
-    }
+    # 'daily': {
+    #     'unit': 'days',
+    #     'interval': 1,
+    #     'days_history': 365,
+    #     'candles_per_year': 252
+    # }
 }
 
 SUPERTREND_CONFIGS_125M = [
@@ -95,7 +95,7 @@ SUPERTREND_CONFIGS_DAILY = [
 
 PARQUET_RETENTION = {
     '60min': 60,
-    '125min': 60,
+    '125min': 200,
     'daily': 60
 }
 

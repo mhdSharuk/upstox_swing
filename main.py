@@ -35,7 +35,6 @@ from indicators.supertrend_numba import SupertrendCalculator
 from indicators.flat_base_numba import FlatBaseDetector
 from indicators.percentage_calculator import PercentageCalculator
 from indicators.symbol_info_merger import SymbolInfoMerger
-from indicators.signal_generator import SignalGenerator
 from storage.supabase_storage import SupabaseStorage
 from utils.logger import setup_logging, get_logger
 
@@ -176,9 +175,9 @@ class UpstoxSupertrendPipeline:
         calculator = SupertrendCalculator()
         
         timeframe_configs = {
-            '60min': SUPERTREND_CONFIGS_60M,
+            # '60min': SUPERTREND_CONFIGS_60M,
             '125min': SUPERTREND_CONFIGS_125M,
-            'daily': SUPERTREND_CONFIGS_DAILY
+            # 'daily': SUPERTREND_CONFIGS_DAILY
         }
         
         self.calculated_data = {}
@@ -221,9 +220,9 @@ class UpstoxSupertrendPipeline:
         symbol_merger = SymbolInfoMerger()
         
         timeframe_configs = {
-            '60min': SUPERTREND_CONFIGS_60M,
+            # '60min': SUPERTREND_CONFIGS_60M,
             '125min': SUPERTREND_CONFIGS_125M,
-            'daily': SUPERTREND_CONFIGS_DAILY
+            # 'daily': SUPERTREND_CONFIGS_DAILY
         }
         
         for timeframe, df in self.calculated_data.items():
@@ -270,39 +269,6 @@ class UpstoxSupertrendPipeline:
         
         return success
     
-    def step7_generate_signals(self) -> bool:
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 7: GENERATE TRADING SIGNALS")
-        logger.info("=" * 60)
-        
-        signal_gen = SignalGenerator()
-        self.signals_data = signal_gen.generate_all_timeframes(self.final_data)
-        
-        if not self.signals_data:
-            logger.warning("No signals generated for any timeframe")
-            return True
-        
-        logger.info(f"✓ Signals generated for {len(self.signals_data)} timeframes")
-        return True
-    
-    def step8_upload_signals(self) -> bool:
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 8: UPLOAD SIGNAL FILES TO SUPABASE")
-        logger.info("=" * 60)
-        
-        if not self.signals_data:
-            logger.info("No signal data to upload")
-            return True
-        
-        success = self.supabase_storage.upload_all_signal_timeframes(self.signals_data)
-        
-        if success:
-            logger.info("✓ Signal parquet files uploaded to Supabase Storage successfully")
-        else:
-            logger.error("✗ Failed to upload signal parquet files to Supabase Storage")
-        
-        return success
-    
     def run(self) -> bool:
         start_time = datetime.now()
         
@@ -339,14 +305,6 @@ class UpstoxSupertrendPipeline:
             
             if not self.step6_upload_to_supabase():
                 logger.error("Pipeline failed at Step 6")
-                return False
-            
-            if not self.step7_generate_signals():
-                logger.error("Pipeline failed at Step 7")
-                return False
-            
-            if not self.step8_upload_signals():
-                logger.error("Pipeline failed at Step 8")
                 return False
             
             end_time = datetime.now()
