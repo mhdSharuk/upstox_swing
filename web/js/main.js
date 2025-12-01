@@ -1,6 +1,5 @@
 /**
- * Main Application Module
- * UPDATED: New Signals tab with strategy-based signal detection
+ * Main Application Module - Signal Tab Focus
  */
 
 // Global state
@@ -20,9 +19,6 @@ function toggleTheme() {
   localStorage.setItem('theme', newTheme);
   
   updateThemeButton(newTheme);
-  if (typeof chartRenderer !== 'undefined') {
-    chartRenderer.updateChartsTheme();
-  }
 }
 
 function updateThemeButton(theme) {
@@ -48,276 +44,180 @@ function initTheme() {
 // TAB MANAGEMENT
 // ═══════════════════════════════════════════════════════════
 
-function switchTab(tab) {
-  currentTab = tab;
+function switchTab(tabName) {
+  currentTab = tabName;
   
   // Update tab buttons
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  event.target.classList.add('active');
+  document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
   
   // Update tab content
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.getElementById(tab + '-tab').classList.add('active');
+  document.getElementById(tabName + '-tab').classList.add('active');
   
   // Load data for the tab
-  if (tab === 'signals') {
+  if (tabName === 'signals') {
     loadSignals();
-  } else if (tab === 'charts') {
-    loadChartsTab();
-  } else if (tab === 'watchlist') {
-    loadWatchlist();
   }
+  // Chart and Watchlist tabs are placeholders for now
 }
 
 // ═══════════════════════════════════════════════════════════
-// SIGNALS TAB (NEW)
+// SIGNALS TAB - MAIN FUNCTIONALITY
 // ═══════════════════════════════════════════════════════════
 
+/**
+ * Load signals with current filter settings
+ * @param {boolean} forceRefresh - Skip cache and reload from Supabase
+ */
 async function loadSignals(forceRefresh = false) {
-  if (isLoading) return;
-  isLoading = true;
+  if (isLoading) {
+    console.log('Already loading, skipping...');
+    return;
+  }
   
-  console.log('📡 Loading signals...');
+  isLoading = true;
+  console.log('📡 Loading signals...', { forceRefresh });
   const startTime = performance.now();
   
   try {
-    // Check if filtersManager exists
-    if (typeof filtersManager === 'undefined' || !filtersManager) {
-      throw new Error('FiltersManager not initialized. Check browser console for errors in filters.js');
-    }
-    
-    if (typeof filtersManager.detectSignals !== 'function') {
-      throw new Error('FiltersManager.detectSignals is not a function. FiltersManager object: ' + JSON.stringify(Object.keys(filtersManager)));
-    }
-    
-    // Disable button and show loading
-    const refreshBtn = document.getElementById('signals-refresh-btn');
+    // Update UI - show loading
+    const refreshBtn = document.getElementById('refresh-btn');
     if (refreshBtn) {
       refreshBtn.disabled = true;
-      refreshBtn.textContent = forceRefresh ? '⏳ Refreshing...' : '⏳ Loading...';
+      refreshBtn.innerHTML = forceRefresh ? '⏳ Refreshing...' : '⏳ Loading...';
     }
     
     document.getElementById('signals-loading').style.display = 'block';
     document.getElementById('signals-content').style.display = 'none';
     
-    // Get filter values
-    const timeframe = document.getElementById('signals-timeframe').value;
-    const strategy = document.getElementById('signals-strategy').value;
-    const mcap = parseFloat(document.getElementById('signals-mcap').value) || 10000;
-    const pctDiff = parseFloat(document.getElementById('signals-pctdiff').value) || 2.5;
-    
-    console.log('Filters:', { timeframe, strategy, mcap, pctDiff });
-    
     // Clear cache if force refresh
     if (forceRefresh) {
       await dataLoader.clearCache();
-      dataLoader.dailyData = null;
-      dataLoader.min125Data = null;
-      dataLoader.min60Data = null;
     }
     
-    // Load data for selected timeframe
-    const data = await dataLoader.getData(timeframe);
+    // Load data
+    await dataLoader.getData(forceRefresh);
     
-    // Detect signals using new strategy logic
-    const signals = filtersManager.detectSignals(data, {
-      timeframe,
-      strategy,
-      mcap,
-      pctDiff
-    });
+    // Get filter value
+    const pctDiffFilter = parseFloat(document.getElementById('pctdiff-filter').value) || 2.5;
+    console.log('Filter - PctDiff:', pctDiffFilter);
     
-    // Render signals table
-    renderSignalsTable(signals);
+    // Detect signals
+    const vsSignals = filtersManager.detectVolatilitySupport(pctDiffFilter);
+    const vbSignals = filtersManager.detectVolatilityBreakout();
     
-    // Update count
-    document.getElementById('signals-count').textContent = signals.length;
+    // Render tables
+    renderSignalTable('vs-tbody', vsSignals, 'vs-count');
+    renderSignalTable('vb-tbody', vbSignals, 'vb-count');
     
     // Show content
     document.getElementById('signals-loading').style.display = 'none';
     document.getElementById('signals-content').style.display = 'block';
     
-    // Update last updated
+    // Update last updated timestamp
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
-    document.getElementById('signals-last-updated').textContent = 
-      `Updated: ${new Date().toLocaleTimeString()} (${elapsed}s)`;
+    const now = new Date().toLocaleTimeString();
+    document.getElementById('last-updated').textContent = `Last updated: ${now} (${elapsed}s)`;
     
+    // Re-enable refresh button
     if (refreshBtn) {
       refreshBtn.disabled = false;
-      refreshBtn.textContent = '🔄 Refresh';
+      refreshBtn.innerHTML = '🔄 Refresh';
     }
     
     console.log(`✓ Signals loaded in ${elapsed}s`);
+    console.log('VS:', vsSignals.length, 'VB:', vbSignals.length);
     
   } catch (error) {
     console.error('❌ Error loading signals:', error);
     alert('Error loading signals: ' + error.message);
     
     document.getElementById('signals-loading').style.display = 'none';
-    const refreshBtn = document.getElementById('signals-refresh-btn');
+    
+    const refreshBtn = document.getElementById('refresh-btn');
     if (refreshBtn) {
       refreshBtn.disabled = false;
-      refreshBtn.textContent = '🔄 Refresh';
+      refreshBtn.innerHTML = '🔄 Refresh';
     }
   } finally {
     isLoading = false;
   }
 }
 
-function renderSignalsTable(signals) {
-  const tbody = document.getElementById('signals-tbody');
+/**
+ * Render signal table
+ * @param {string} tbodyId - Table body element ID
+ * @param {Array} signals - Array of signal objects
+ * @param {string} countId - Count element ID
+ */
+function renderSignalTable(tbodyId, signals, countId) {
+  const tbody = document.getElementById(tbodyId);
+  const countEl = document.getElementById(countId);
+  
+  // Update count
+  countEl.textContent = signals.length;
+  
+  // Clear table
   tbody.innerHTML = '';
   
   if (signals.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-secondary);">No signals found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 40px; color: var(--text-secondary);">No signals found</td></tr>';
     return;
   }
   
+  // Render rows
   signals.forEach(signal => {
+    const isSelected = filtersManager.isSelected(signal.symbol);
+    
     const tr = document.createElement('tr');
     tr.innerHTML = `
+      <td style="width: 40px;">
+        <input 
+          type="checkbox" 
+          class="symbol-checkbox" 
+          data-symbol="${signal.symbol}"
+          ${isSelected ? 'checked' : ''}
+        >
+      </td>
       <td><strong>${signal.symbol}</strong></td>
       <td>${signal.close}</td>
-      <td class="${signal.ltpPercent >= 0 ? 'positive' : 'negative'}">${signal.ltpPercent}%</td>
-      <td>${signal.pctDiff}%</td>
-      <td>${signal.sector}</td>
-      <td>${signal.industry}</td>
     `;
     tbody.appendChild(tr);
   });
+  
+  // Attach checkbox event listeners
+  document.querySelectorAll('.symbol-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const symbol = e.target.dataset.symbol;
+      filtersManager.toggleSymbol(symbol);
+    });
+  });
 }
 
-// ═══════════════════════════════════════════════════════════
-// CHARTS TAB
-// ═══════════════════════════════════════════════════════════
-
-async function loadChartsTab() {
-  console.log('📊 Loading charts tab...');
-  
-  const dataSource = document.getElementById('charts-data').value || 'daily';
-  const data = await dataLoader.getData(dataSource);
-  
-  await filtersManager.populateChartFilters(dataSource, data);
-  await loadCharts();
-}
-
-async function loadCharts() {
-  console.log('📊 Loading charts...');
-  const startTime = performance.now();
-  
-  try {
-    document.getElementById('charts-loading').style.display = 'block';
-    document.getElementById('charts-content').style.display = 'none';
-    
-    const chartFilters = filtersManager.getCurrentFilters('charts');
-    const timeframe = chartFilters.data;
-    const data = await dataLoader.getData(timeframe);
-    
-    const filteredSymbols = filtersManager.filterSymbolsForCharts(data, chartFilters);
-    
-    console.log(`Found ${filteredSymbols.length} symbols matching filters`);
-    
-    if (typeof chartRenderer !== 'undefined') {
-      await chartRenderer.renderChartsGrid(filteredSymbols, chartFilters.supertrend, timeframe);
-    }
-    
-    document.getElementById('charts-loading').style.display = 'none';
-    document.getElementById('charts-content').style.display = 'block';
-    
-    const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
-    console.log(`✓ Charts loaded in ${elapsed}s`);
-    
-  } catch (error) {
-    console.error('❌ Error loading charts:', error);
-    alert('Error loading charts: ' + error.message);
-    document.getElementById('charts-loading').style.display = 'none';
-  }
-}
-
-async function onChartDataChange() {
-  const dataSource = document.getElementById('charts-data').value;
-  console.log(`📊 Chart data changed to: ${dataSource}`);
-  
-  try {
-    const data = await dataLoader.getData(dataSource);
-    await filtersManager.populateChartFilters(dataSource, data);
-    await loadCharts();
-  } catch (error) {
-    console.error('❌ Error changing chart data:', error);
-    alert('Error loading data: ' + error.message);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════
-// WATCHLIST TAB
-// ═══════════════════════════════════════════════════════════
-
-let watchlistData = [];
-
-async function loadWatchlist() {
-  console.log('📋 Loading watchlist...');
-  
-  try {
-    document.getElementById('watchlist-loading').style.display = 'block';
-    document.getElementById('watchlist-content').style.display = 'none';
-    
-    const response = await fetch(`${CONFIG.APPS_SCRIPT_URL}?action=getWatchlist`);
-    const data = await response.json();
-    watchlistData = data;
-    
-    renderWatchlist();
-    
-    document.getElementById('watchlist-last-updated').textContent = 
-      `Updated: ${new Date().toLocaleTimeString()}`;
-    
-  } catch (error) {
-    console.error('❌ Error loading watchlist:', error);
-    alert('Error loading watchlist: ' + error.message);
-  }
-}
-
-function renderWatchlist() {
-  document.getElementById('watchlist-loading').style.display = 'none';
-  document.getElementById('watchlist-content').style.display = 'block';
-  
-  const tbody = document.getElementById('watchlist-tbody');
-  tbody.innerHTML = '';
-  
-  if (!watchlistData.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: var(--text-secondary);">No items in watchlist</td></tr>';
+/**
+ * Handle filter change (auto-update on input)
+ */
+function onFilterChange() {
+  if (!dataLoader.data) {
+    console.log('No data loaded yet, skipping filter update');
     return;
   }
   
-  watchlistData.forEach(item => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><strong>${item.symbol}</strong></td>
-      <td>${item.sheet || 'N/A'}</td>
-      <td>${item.supertrend || 'N/A'}</td>
-      <td>${item.type || 'N/A'}</td>
-      <td>${item.pct || 'N/A'}</td>
-      <td>${item.flatbase || 'N/A'}</td>
-      <td>${item.dateAdded || 'N/A'}</td>
-      <td><button class="remove-btn" onclick="removeFromWatchlist('${item.symbol}')">Remove</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-async function removeFromWatchlist(symbol) {
-  try {
-    const response = await fetch(CONFIG.APPS_SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'remove', symbol })
-    });
-    
-    if (response.ok) {
-      await loadWatchlist();
-    }
-  } catch (error) {
-    console.error('Error removing from watchlist:', error);
-    alert('Error removing from watchlist');
-  }
+  console.log('Filter changed, updating signals...');
+  
+  // Get filter value
+  const pctDiffFilter = parseFloat(document.getElementById('pctdiff-filter').value) || 2.5;
+  
+  // Re-detect signals with new filter
+  const vsSignals = filtersManager.detectVolatilitySupport(pctDiffFilter);
+  const vbSignals = filtersManager.detectVolatilityBreakout();
+  
+  // Re-render tables
+  renderSignalTable('vs-tbody', vsSignals, 'vs-count');
+  renderSignalTable('vb-tbody', vbSignals, 'vb-count');
+  
+  console.log('Signals updated with new filter');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -327,21 +227,28 @@ async function removeFromWatchlist(symbol) {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('🚀 App initialized');
   
-  // Verify required objects are loaded
+  // Verify dependencies
   if (typeof CONFIG === 'undefined') {
-    console.error('❌ CONFIG not loaded! Ensure config.js is included before main.js');
+    console.error('❌ CONFIG not loaded! Ensure config.js is included.');
+    alert('Configuration error. Check console for details.');
     return;
   }
   if (typeof dataLoader === 'undefined') {
-    console.error('❌ dataLoader not loaded! Ensure dataLoader.js is included before main.js');
+    console.error('❌ dataLoader not loaded! Ensure dataLoader.js is included.');
+    alert('DataLoader error. Check console for details.');
     return;
   }
   if (typeof filtersManager === 'undefined') {
-    console.error('❌ filtersManager not loaded! Ensure filters.js is included before main.js');
+    console.error('❌ filtersManager not loaded! Ensure filters.js is included.');
+    alert('FiltersManager error. Check console for details.');
     return;
   }
   
   console.log('✅ All dependencies loaded');
+  
+  // Initialize theme
   initTheme();
-  loadSignals(); // Load signals tab by default
+  
+  // Load signals automatically
+  loadSignals();
 });

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Signal Tracker</title>
+  <title>Signal Tracker - 125min</title>
   
   <!-- Styles -->
   <link rel="stylesheet" href="css/styles.css">
@@ -12,7 +12,7 @@
   <div class="container">
     <!-- Header -->
     <div class="header">
-      <h1>📊 Signal Tracker</h1>
+      <h1>📊 Signal Tracker - 125min</h1>
       <button class="theme-toggle" onclick="toggleTheme()">
         <span id="theme-icon">🌙</span>
         <span id="theme-text">Dark Mode</span>
@@ -21,186 +21,119 @@
     
     <!-- Tabs -->
     <div class="tabs">
-      <button class="tab active" onclick="switchTab('signals')">Signals</button>
-      <button class="tab" onclick="switchTab('charts')">Charts</button>
-      <button class="tab" onclick="switchTab('watchlist')">Watchlist</button>
+      <button class="tab active" data-tab="signals" onclick="switchTab('signals')">Signals</button>
+      <button class="tab" data-tab="charts" onclick="switchTab('charts')">Charts</button>
+      <button class="tab" data-tab="watchlist" onclick="switchTab('watchlist')">Watchlist</button>
     </div>
     
     <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- SIGNALS TAB (NEW) -->
+    <!-- SIGNALS TAB -->
     <!-- ═══════════════════════════════════════════════════════════ -->
     <div id="signals-tab" class="tab-content active">
+      <!-- Filters -->
       <div class="filters">
-        <h3>Signal Filters</h3>
-        <div class="filter-grid">
-          <!-- Data (Timeframe) -->
+        <h3>Filters</h3>
+        <div class="filter-row">
           <div class="filter-item">
-            <label>Data</label>
-            <select id="signals-timeframe" onchange="loadSignals()">
-              <option value="daily">Daily</option>
-              <option value="min125">125min</option>
-              <option value="min60">60min</option>
-            </select>
+            <label for="pctdiff-filter">Pct Diff ≤ (%)</label>
+            <input 
+              type="number" 
+              id="pctdiff-filter" 
+              value="2.5" 
+              step="0.1" 
+              min="0"
+              oninput="onFilterChange()"
+            >
           </div>
-          
-          <!-- Strategy -->
-          <div class="filter-item">
-            <label>Strategy</label>
-            <select id="signals-strategy" onchange="loadSignals()">
-              <option value="volatility_breakout">Volatility Breakout</option>
-              <option value="volatility_support">Volatility Support</option>
-            </select>
+          <div class="filter-actions">
+            <button class="refresh-btn" id="refresh-btn" onclick="loadSignals(true)">
+              🔄 Refresh
+            </button>
+            <span id="last-updated" class="last-updated"></span>
           </div>
-          
-          <!-- Market Cap -->
-          <div class="filter-item">
-            <label>Market Cap ≥ (Cr)</label>
-            <input type="number" id="signals-mcap" value="10000" step="1000" onchange="loadSignals()">
-          </div>
-          
-          <!-- Pct Diff (for Volatility Support) -->
-          <div class="filter-item">
-            <label>Pct Diff ≤ (%)</label>
-            <input type="number" id="signals-pctdiff" value="2.5" step="0.1" onchange="loadSignals()">
-          </div>
-        </div>
-        
-        <div style="margin-top: 15px; display: flex; align-items: center;">
-          <button class="refresh-btn" id="signals-refresh-btn" onclick="loadSignals(true)">🔄 Refresh</button>
-          <span id="signals-last-updated" class="last-updated"></span>
         </div>
       </div>
       
       <!-- Loading State -->
       <div id="signals-loading" class="loading">
         <div class="spinner"></div>
-        Loading signals...
+        <p>Loading signals from Supabase...</p>
       </div>
       
       <!-- Signals Content -->
       <div id="signals-content" style="display: none;">
+        
+        <!-- Volatility Support (VS) Table -->
         <div class="signal-table">
-          <div class="table-header long">
-            <span>Long Signals</span>
-            <span id="signals-count">0</span>
+          <div class="table-header vs-header">
+            <span>Volatility Support</span>
+            <span class="signal-count" id="vs-count">0</span>
           </div>
           <div class="table-wrapper">
             <table>
               <thead>
                 <tr>
+                  <th style="width: 40px;">
+                    <input type="checkbox" id="vs-select-all" title="Select All">
+                  </th>
                   <th>Symbol</th>
                   <th>Close</th>
-                  <th>LTP %</th>
-                  <th>Pct Diff</th>
-                  <th>Sector</th>
-                  <th>Industry</th>
                 </tr>
               </thead>
-              <tbody id="signals-tbody"></tbody>
+              <tbody id="vs-tbody">
+                <!-- VS signals will be inserted here -->
+              </tbody>
             </table>
           </div>
         </div>
-      </div>
-    </div>
-    
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- CHARTS TAB -->
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <div id="charts-tab" class="tab-content">
-      <div class="filters">
-        <h3>Chart Filters</h3>
-        <div class="filter-grid">
-          <div class="filter-item">
-            <label>Data</label>
-            <select id="charts-data" onchange="onChartDataChange()">
-              <option value="daily">Daily</option>
-              <option value="min125">125min</option>
-              <option value="min60">60min</option>
-            </select>
-          </div>
-          <div class="filter-item">
-            <label>Type</label>
-            <select id="charts-type" onchange="loadCharts()">
-              <option value="Long">Long</option>
-              <option value="Short">Short</option>
-            </select>
-          </div>
-          <div class="filter-item">
-            <label>Supertrend</label>
-            <select id="charts-supertrend" onchange="loadCharts()"></select>
-          </div>
-          <div class="filter-item">
-            <label>Sector</label>
-            <select id="charts-sector" onchange="loadCharts()">
-              <option value="All">All</option>
-            </select>
-          </div>
-          <div class="filter-item">
-            <label>Industry</label>
-            <select id="charts-industry" onchange="loadCharts()">
-              <option value="All">All</option>
-            </select>
-          </div>
-          <div class="filter-item">
-            <label>Market Cap ≥</label>
-            <input type="number" id="charts-mcap" value="10000" onchange="loadCharts()">
-          </div>
-          <div class="filter-item">
-            <label>Pct Diff ≤</label>
-            <input type="number" id="charts-pctdiff" value="2.5" step="0.1" onchange="loadCharts()">
-          </div>
-          <div class="filter-item">
-            <label>Flatbase ≥</label>
-            <input type="number" id="charts-flatbase" value="3" onchange="loadCharts()">
-          </div>
-        </div>
-      </div>
-      
-      <div id="charts-loading" class="loading">
-        <div class="spinner"></div>
-        Loading charts...
-      </div>
-      
-      <div id="charts-content" style="display: none;">
-        <div id="charts-grid"></div>
-      </div>
-    </div>
-    
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- WATCHLIST TAB -->
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <div id="watchlist-tab" class="tab-content">
-      <div class="watchlist-section">
-        <h2>📋 Watchlist</h2>
         
-        <div id="watchlist-loading" class="loading">
-          <div class="spinner"></div>
-          Loading watchlist...
-        </div>
-        
-        <div id="watchlist-content" style="display: none;">
+        <!-- Volatility Breakout (VB) Table -->
+        <div class="signal-table">
+          <div class="table-header vb-header">
+            <span>Volatility Breakout</span>
+            <span class="signal-count" id="vb-count">0</span>
+          </div>
           <div class="table-wrapper">
             <table>
               <thead>
                 <tr>
+                  <th style="width: 40px;">
+                    <input type="checkbox" id="vb-select-all" title="Select All">
+                  </th>
                   <th>Symbol</th>
-                  <th>Sheet</th>
-                  <th>Supertrend</th>
-                  <th>Type</th>
-                  <th>Pct</th>
-                  <th>Flatbase</th>
-                  <th>Date Added</th>
-                  <th>Action</th>
+                  <th>Close</th>
                 </tr>
               </thead>
-              <tbody id="watchlist-tbody"></tbody>
+              <tbody id="vb-tbody">
+                <!-- VB signals will be inserted here -->
+              </tbody>
             </table>
           </div>
         </div>
         
-        <span id="watchlist-last-updated" class="last-updated"></span>
       </div>
     </div>
+    
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- CHARTS TAB (Placeholder) -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div id="charts-tab" class="tab-content">
+      <div class="placeholder">
+        <h2>📈 Charts</h2>
+        <p>Chart functionality will be implemented here.</p>
+      </div>
+    </div>
+    
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- WATCHLIST TAB (Placeholder) -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div id="watchlist-tab" class="tab-content">
+      <div class="placeholder">
+        <h2>📋 Watchlist</h2>
+        <p>Watchlist functionality will be implemented here.</p>
+      </div>
+    </div>
+    
   </div>
   
   <!-- Scripts -->
@@ -208,6 +141,5 @@
   <script src="js/dataLoader.js"></script>
   <script src="js/filters.js"></script>
   <script src="js/main.js"></script>
-  <script src="js/chartRenderer.js"></script>
 </body>
 </html>

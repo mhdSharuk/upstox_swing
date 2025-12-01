@@ -1,62 +1,45 @@
 /**
- * Data Loader Module - UPDATED with 60min support
- * Uses hyparquet with rowFormat: 'object' for direct row-oriented data
+ * Data Loader Module - Simplified for 125min Data Only
+ * Uses hyparquet with IndexedDB caching
  */
 
 class DataLoader {
   constructor() {
-    this.dailyData = null;
-    this.min125Data = null;
-    this.min60Data = null;
-    this.isLoading = {
-      daily: false,
-      min125: false,
-      min60: false
-    };
+    this.data = null;
+    this.isLoading = false;
   }
 
   /**
    * Load parquet file from Supabase with IndexedDB caching
-   * @param {string} timeframe - 'daily', 'min125', or 'min60'
+   * @param {boolean} forceRefresh - Skip cache and download fresh data
    * @returns {Promise<Array>} Parsed data as array of objects
    */
-  async loadParquetData(timeframe) {
+  async loadData(forceRefresh = false) {
     try {
       if (typeof CONFIG === 'undefined') {
-        throw new Error('CONFIG is not defined. Make sure config.js is loaded before dataLoader.js');
+        throw new Error('CONFIG is not defined. Make sure config.js is loaded first.');
       }
       
-      let url;
-      if (timeframe === 'daily') {
-        url = CONFIG.PARQUET_URLS.DAILY;
-      } else if (timeframe === 'min125') {
-        url = CONFIG.PARQUET_URLS.MIN_125;
-      } else if (timeframe === 'min60') {
-        url = CONFIG.PARQUET_URLS.MIN_60;
-      } else {
-        throw new Error(`Unknown timeframe: ${timeframe}`);
-      }
-      
-      console.log(`📥 Loading ${timeframe} data from:`, url);
+      console.log('📥 Loading 125min data from:', CONFIG.PARQUET_URL);
 
-      if (CONFIG.SUPABASE_URL === 'YOUR_SUPABASE_URL_HERE') {
-        throw new Error('Please configure SUPABASE_URL in js/config.js');
-      }
-
-      this.isLoading[timeframe] = true;
+      this.isLoading = true;
       
-      // Try to get from IndexedDB cache first
-      const cachedBuffer = await this.getFromCache(timeframe);
       let arrayBuffer;
       
-      if (cachedBuffer) {
-        console.log(`✓ Loaded ${timeframe} from browser cache (instant!)`);
-        arrayBuffer = cachedBuffer;
-      } else {
-        console.log(`📥 Downloading ${timeframe} for first time...`);
+      if (!forceRefresh) {
+        // Try to get from IndexedDB cache first
+        const cachedBuffer = await this.getFromCache();
+        if (cachedBuffer) {
+          console.log('✓ Loaded from browser cache (instant!)');
+          arrayBuffer = cachedBuffer;
+        }
+      }
+      
+      if (!arrayBuffer) {
+        console.log('📥 Downloading from Supabase...');
         
         // Fetch with progress
-        const response = await fetch(url);
+        const response = await fetch(CONFIG.PARQUET_URL);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -96,23 +79,21 @@ class DataLoader {
         }
         
         arrayBuffer = combinedArray.buffer;
-        console.log(`✓ Downloaded ${timeframe}: ${(receivedLength / 1024 / 1024).toFixed(2)} MB`);
+        console.log(`✓ Downloaded: ${(receivedLength / 1024 / 1024).toFixed(2)} MB`);
         
-        // Save to IndexedDB cache
-        await this.saveToCache(timeframe, arrayBuffer);
-        console.log(`✓ Saved ${timeframe} to browser cache`);
+        // Save to cache
+        await this.saveToCache(arrayBuffer);
+        console.log('✓ Saved to browser cache');
       }
       
-      // Use hyparquet to parse parquet file with rowFormat: 'object'
-      console.log(`✓ Parsing ${timeframe} data with hyparquet...`);
+      // Parse parquet file with hyparquet
+      console.log('✓ Parsing parquet data...');
       
-      // Import hyparquet with compression support
       const [{ parquetRead }, { compressors }] = await Promise.all([
         import('https://cdn.jsdelivr.net/npm/hyparquet@1.4.1/+esm'),
         import('https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.1/+esm')
       ]);
       
-      // Parse parquet file - with rowFormat: 'object' to get array of objects directly
       const data = await new Promise((resolve, reject) => {
         parquetRead({
           file: arrayBuffer,
@@ -123,40 +104,29 @@ class DataLoader {
         });
       });
       
-      console.log(`✓ Parsed ${data.length} rows as objects`);
+      console.log(`✓ Parsed ${data.length} rows`);
       
-      // Log sample row to verify structure
       if (data.length > 0) {
         console.log('Sample row:', data[0]);
         console.log('Available columns:', Object.keys(data[0]));
       }
       
-      // Cache the data
-      if (timeframe === 'daily') {
-        this.dailyData = data;
-      } else if (timeframe === 'min125') {
-        this.min125Data = data;
-      } else if (timeframe === 'min60') {
-        this.min60Data = data;
-      }
-      
-      this.isLoading[timeframe] = false;
+      this.data = data;
+      this.isLoading = false;
       return data;
       
     } catch (error) {
-      this.isLoading[timeframe] = false;
-      console.error(`❌ Error loading ${timeframe} data:`, error);
-      console.error('Error details:', error.stack);
+      this.isLoading = false;
+      console.error('❌ Error loading data:', error);
       throw error;
     }
   }
 
   /**
-   * Get parquet file from IndexedDB cache
-   * @param {string} timeframe - 'daily', 'min125', or 'min60'
-   * @returns {Promise<ArrayBuffer|null>} Cached buffer or null
+   * Get cached parquet file from IndexedDB
+   * @returns {Promise<ArrayBuffer|null>}
    */
-  async getFromCache(timeframe) {
+  async getFromCache() {
     return new Promise((resolve) => {
       const request = indexedDB.open('ParquetCache', 1);
       
@@ -173,7 +143,7 @@ class DataLoader {
         const db = event.target.result;
         const transaction = db.transaction(['files'], 'readonly');
         const store = transaction.objectStore('files');
-        const getRequest = store.get(timeframe);
+        const getRequest = store.get('125min');
         
         getRequest.onsuccess = () => resolve(getRequest.result || null);
         getRequest.onerror = () => resolve(null);
@@ -183,11 +153,10 @@ class DataLoader {
 
   /**
    * Save parquet file to IndexedDB cache
-   * @param {string} timeframe - 'daily', 'min125', or 'min60'
-   * @param {ArrayBuffer} arrayBuffer - File data
+   * @param {ArrayBuffer} arrayBuffer
    * @returns {Promise<void>}
    */
-  async saveToCache(timeframe, arrayBuffer) {
+  async saveToCache(arrayBuffer) {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open('ParquetCache', 1);
       
@@ -204,7 +173,7 @@ class DataLoader {
         const db = event.target.result;
         const transaction = db.transaction(['files'], 'readwrite');
         const store = transaction.objectStore('files');
-        const putRequest = store.put(arrayBuffer, timeframe);
+        const putRequest = store.put(arrayBuffer, '125min');
         
         putRequest.onsuccess = () => resolve();
         putRequest.onerror = () => reject(new Error('Failed to save to cache'));
@@ -213,7 +182,7 @@ class DataLoader {
   }
 
   /**
-   * Clear all cached data
+   * Clear cached data
    * @returns {Promise<void>}
    */
   async clearCache() {
@@ -237,148 +206,63 @@ class DataLoader {
   }
 
   /**
-   * Get data for specific timeframe (loads if not cached)
-   * @param {string} timeframe - 'daily', 'min125', or 'min60'
-   * @returns {Promise<Array>} Data array
+   * Get cached data or load if not available
+   * @param {boolean} forceRefresh - Skip cache
+   * @returns {Promise<Array>}
    */
-  async getData(timeframe) {
-    if (timeframe === 'daily') {
-      if (!this.dailyData) {
-        return await this.loadParquetData('daily');
-      }
-      return this.dailyData;
-    } else if (timeframe === 'min125') {
-      if (!this.min125Data) {
-        return await this.loadParquetData('min125');
-      }
-      return this.min125Data;
-    } else if (timeframe === 'min60') {
-      if (!this.min60Data) {
-        return await this.loadParquetData('min60');
-      }
-      return this.min60Data;
-    } else {
-      throw new Error(`Unknown timeframe: ${timeframe}`);
+  async getData(forceRefresh = false) {
+    if (forceRefresh || !this.data) {
+      return await this.loadData(forceRefresh);
     }
+    return this.data;
   }
 
   /**
-   * Force refresh data (clear cache and reload)
-   * @param {string} timeframe - 'daily', 'min125', or 'min60'
-   * @returns {Promise<Array>} Fresh data
+   * Group data by symbol and sort by timestamp
+   * @returns {Map<string, Array>} Map of symbol -> sorted candles
    */
-  async refreshData(timeframe) {
-    if (timeframe === 'daily') {
-      this.dailyData = null;
-    } else if (timeframe === 'min125') {
-      this.min125Data = null;
-    } else if (timeframe === 'min60') {
-      this.min60Data = null;
-    }
-    return await this.getData(timeframe);
-  }
-
-  /**
-   * Get unique values for a column (for filter dropdowns)
-   * @param {Array} data - Data array
-   * @param {string} column - Column name
-   * @returns {Array} Sorted unique values
-   */
-  getUniqueValues(data, column) {
-    const values = new Set();
-    data.forEach(row => {
-      if (row[column] !== null && row[column] !== undefined && row[column] !== '') {
-        values.add(row[column]);
-      }
-    });
-    const uniqueArray = Array.from(values).sort();
-    console.log(`Found ${uniqueArray.length} unique values for ${column}:`, uniqueArray.slice(0, 10));
-    return uniqueArray;
-  }
-
-  /**
-   * Get available supertrend columns for a timeframe
-   * @param {string} timeframe - 'daily', 'min125', or 'min60'
-   * @returns {Array} Array of supertrend config objects
-   */
-  getSupertrendConfigs(timeframe) {
-    if (timeframe === 'daily') {
-      return CONFIG.SUPERTRENDS.DAILY;
-    } else if (timeframe === 'min125') {
-      return CONFIG.SUPERTRENDS.MIN_125;
-    } else if (timeframe === 'min60') {
-      return CONFIG.SUPERTRENDS.MIN_60;
-    } else {
-      return [];
-    }
-  }
-
-  /**
-   * Get latest candle for each symbol (for signal detection)
-   * @param {Array} data - Full data array
-   * @returns {Map} Map of symbol -> latest row
-   */
-  getLatestCandles(data) {
-    const latestMap = new Map();
+  getDataBySymbol() {
+    if (!this.data) return new Map();
     
-    console.log(`Processing ${data.length} rows to find latest candles...`);
+    const bySymbol = new Map();
     
-    // Group by symbol and get latest timestamp
-    data.forEach(row => {
-      const symbol = row.trading_symbol;
-      if (!symbol) {
-        console.warn('Row missing trading_symbol:', row);
-        return;
-      }
+    this.data.forEach(row => {
+      const symbol = row[CONFIG.COLUMNS.SYMBOL];
+      if (!symbol) return;
       
-      if (!latestMap.has(symbol)) {
-        latestMap.set(symbol, row);
-      } else {
-        const existing = latestMap.get(symbol);
-        const rowTime = new Date(row.timestamp);
-        const existingTime = new Date(existing.timestamp);
-        
-        if (rowTime > existingTime) {
-          latestMap.set(symbol, row);
-        }
+      if (!bySymbol.has(symbol)) {
+        bySymbol.set(symbol, []);
       }
+      bySymbol.get(symbol).push(row);
     });
     
-    console.log(`Found latest candles for ${latestMap.size} symbols`);
+    // Sort each symbol's candles by timestamp
+    bySymbol.forEach((candles, symbol) => {
+      candles.sort((a, b) => new Date(a[CONFIG.COLUMNS.TIMESTAMP]) - new Date(b[CONFIG.COLUMNS.TIMESTAMP]));
+    });
     
-    // Log sample of latest candles for debugging
-    const sampleSymbol = Array.from(latestMap.keys())[0];
-    if (sampleSymbol) {
-      console.log(`Sample latest candle (${sampleSymbol}):`, latestMap.get(sampleSymbol));
-    }
-    
-    return latestMap;
+    return bySymbol;
   }
 
   /**
-   * Get all candles for a specific symbol
-   * @param {Array} data - Full data array
-   * @param {string} symbol - Trading symbol
-   * @returns {Array} All candles for the symbol, sorted by timestamp
+   * Get latest candle for each symbol
+   * @returns {Map<string, Object>} Map of symbol -> latest candle
    */
-  getSymbolCandles(data, symbol) {
-    return data
-      .filter(row => row.trading_symbol === symbol)
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  }
-  
-  /**
-   * Get last N candles for a specific symbol
-   * @param {Array} data - Full data array
-   * @param {string} symbol - Trading symbol
-   * @param {number} n - Number of candles to get
-   * @returns {Array} Last N candles for the symbol, sorted by timestamp (oldest first)
-   */
-  getLastNCandles(data, symbol, n = 10) {
-    const allCandles = this.getSymbolCandles(data, symbol);
-    return allCandles.slice(-n); // Get last N candles
+  getLatestCandles() {
+    const bySymbol = this.getDataBySymbol();
+    const latest = new Map();
+    
+    bySymbol.forEach((candles, symbol) => {
+      if (candles.length > 0) {
+        latest.set(symbol, candles[candles.length - 1]);
+      }
+    });
+    
+    console.log(`Found latest candles for ${latest.size} symbols`);
+    return latest;
   }
 }
 
 // Create global instance
 const dataLoader = new DataLoader();
+console.log('✅ DataLoader initialized');
