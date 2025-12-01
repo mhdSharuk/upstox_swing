@@ -30,21 +30,24 @@ class SymbolInfoMerger:
     
     def load_symbol_info(self) -> bool:
         """
-        Load symbol info CSV file from Google Sheets URL
+        Load symbol info from CSV
         
         Returns:
-            bool: True if loaded successfully
+            bool: True if successful, False otherwise
         """
+        # Check if already loaded
+        if self.symbol_info_df is not None:
+            return True
+            
         try:
             logger.info("=" * 60)
-            logger.info("LOADING SYMBOL INFO CSV")
+            logger.info(f"LOADING SYMBOL INFO FROM CSV: {self.csv_url}")
             logger.info("=" * 60)
-            logger.info(f"URL: {self.csv_url}")
             
-            # Load CSV from URL
+            # Read CSV
             df = pd.read_csv(self.csv_url)
             
-            # Select and rename columns
+            # Filter required columns
             df = df[['Symbol', 'Sector', 'Industry', 'MCap Cr']]
             
             # Clean market cap (remove commas and convert to float)

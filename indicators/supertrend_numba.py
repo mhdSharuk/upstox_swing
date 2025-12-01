@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from numba import njit
 from typing import Dict, Optional, Tuple, List
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from .atr_numba import ATRCalculator
 from utils.logger import get_logger, ProgressLogger
@@ -17,7 +17,7 @@ from utils.validators import DataValidator
 logger = get_logger(__name__)
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _calculate_supertrend_numba(
     high: np.ndarray,
     low: np.ndarray,
@@ -127,7 +127,7 @@ def _calculate_supertrend_numba(
     return supertrend, direction, upperBand, lowerBand
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _calculate_sma_numba(values: np.ndarray, period: int) -> np.ndarray:
     """
     Numba-optimized Simple Moving Average calculation
@@ -380,7 +380,7 @@ class SupertrendCalculator:
         # Cap workers at reasonable maximum
         max_workers = min(max_workers, num_symbols, 16)
     
-        logger.info(f"Calculating supertrends for {num_symbols} symbols using {max_workers} parallel workers (Numba-optimized)...")
+        logger.info(f"Calculating supertrends for {num_symbols} symbols using {max_workers} parallel threads (Numba-optimized)...")
         
         return self._calculate_parallel(df_by_symbol, configs, timeframe, max_workers)
     
@@ -426,7 +426,7 @@ class SupertrendCalculator:
         timeframe: str,
         max_workers: int
     ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Dict]]:
-        """Parallel calculation using ProcessPoolExecutor"""
+        """Parallel calculation using ThreadPoolExecutor"""
         calculated_dfs = {}
         states = {}
         
@@ -442,8 +442,8 @@ class SupertrendCalculator:
             return {}, {}
         
         try:
-            # Use ProcessPoolExecutor for parallel processing
-            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            # Use ThreadPoolExecutor for parallel processing
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all jobs
                 future_to_symbol = {
                     executor.submit(_calculate_supertrend_worker, args): args[0]

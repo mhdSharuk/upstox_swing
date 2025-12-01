@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from numba import njit
 from typing import List
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing as mp
 from config.settings import FLAT_BASE_TOLERANCE, FLAT_BASE_MIN_COUNT
 from utils.logger import get_logger
@@ -17,7 +17,7 @@ from utils.validators import DataValidator
 logger = get_logger(__name__)
 
 
-@njit(cache=True)
+@njit(cache=True, nogil=True)
 def _detect_flat_base_numba(supertrend_values: np.ndarray, tolerance: float) -> np.ndarray:
     """
     Numba-optimized flat base detection
@@ -208,13 +208,13 @@ class FlatBaseDetector:
             dict: Updated dictionary with flat base counts
         """
         logger.info(f"Calculating flat base counts for {len(df_by_symbol)} symbols...")
-        logger.info(f"Using {self.n_jobs} parallel workers with Numba acceleration")
+        logger.info(f"Using {self.n_jobs} parallel threads with Numba acceleration")
         
         config_names = [config['name'] for config in configs]
         updated_dfs = {}
         
-        # Use ProcessPoolExecutor for parallel processing
-        with ProcessPoolExecutor(max_workers=self.n_jobs) as executor:
+        # Use ThreadPoolExecutor for parallel processing
+        with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
             # Submit all tasks
             future_to_symbol = {
                 executor.submit(

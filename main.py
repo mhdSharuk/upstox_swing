@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # Import all necessary modules
 from config.settings import (
     SUPERTREND_CONFIGS_125M,
+    SUPERTREND_CONFIGS_60M,
     SUPERTREND_CONFIGS_DAILY,
     TIMEFRAME_CONFIG,
     INSTRUMENT_FILTERS,
@@ -226,7 +227,7 @@ class UpstoxSupertrendPipeline:
         fetcher = HistoricalDataFetcher(self.access_token)
         
         # Fetch data for both timeframes
-        timeframes = ['125min', 'daily']
+        timeframes = TIMEFRAME_CONFIG.keys() #['125min', 'daily']
         
         self.historical_data = fetcher.fetch_instruments_data(
             self.instruments_dict,
@@ -241,145 +242,90 @@ class UpstoxSupertrendPipeline:
         
         return True
     
-    def step4_calculate_supertrend(self) -> bool:
+    def process_single_timeframe(self, timeframe: str) -> tuple:
         """
-        Step 4: Calculate supertrend indicators for all timeframes
+        Process a single timeframe through the entire calculation pipeline
         
+        Args:
+            timeframe: Timeframe to process
+            
         Returns:
-            bool: True if successful
+            tuple: (timeframe, final_df, state_variables, success)
         """
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 4: CALCULATE SUPERTREND INDICATORS")
-        logger.info("=" * 60)
-        
-        st_calculator = SupertrendCalculator()
-        
-        # Process 125min timeframe
-        if '125min' in self.historical_data:
-            logger.info("\nCalculating 125-minute supertrends...")
-            calculated_125m, states_125m = st_calculator.calculate_with_state_preservation(
-                self.historical_data['125min'],
-                SUPERTREND_CONFIGS_125M,
-                '125min'
+        try:
+            logger.info(f"\n[{timeframe}] STARTING PROCESSING...")
+            
+            # Get data
+            if timeframe not in self.historical_data:
+                logger.warning(f"[{timeframe}] No historical data found")
+                return timeframe, None, None, False
+            
+            df_by_symbol = self.historical_data[timeframe]
+            
+            # Select configs
+            if timeframe == '125min':
+                configs = SUPERTREND_CONFIGS_125M
+            elif timeframe == '60min':
+                configs = SUPERTREND_CONFIGS_60M
+            elif timeframe == 'daily':
+                configs = SUPERTREND_CONFIGS_DAILY
+            else:
+                logger.warning(f"[{timeframe}] No config found")
+                return timeframe, None, None, False
+            
+            # 1. Calculate Supertrend
+            logger.info(f"[{timeframe}] Calculating Supertrend...")
+            st_calculator = SupertrendCalculator()
+            calculated_data, states = st_calculator.calculate_with_state_preservation(
+                df_by_symbol,
+                configs,
+                timeframe
             )
-            self.calculated_data['125min'] = calculated_125m
-            self.state_variables['125min'] = states_125m
-        
-        # Process daily timeframe
-        if 'daily' in self.historical_data:
-            logger.info("\nCalculating daily supertrends...")
-            calculated_daily, states_daily = st_calculator.calculate_with_state_preservation(
-                self.historical_data['daily'],
-                SUPERTREND_CONFIGS_DAILY,
-                'daily'
+            
+            # 2. Detect Flat Base
+            logger.info(f"[{timeframe}] Detecting Flat Base...")
+            fb_detector = FlatBaseDetector()
+            calculated_data = fb_detector.calculate_flat_bases_for_symbols(
+                calculated_data,
+                configs
             )
-            self.calculated_data['daily'] = calculated_daily
-            self.state_variables['daily'] = states_daily
-        
-        logger.info("✓ Supertrend calculations complete")
-        
-        return True
-    
-    def step5_detect_flat_base(self) -> bool:
-        """
-        Step 5: Detect flat base patterns in supertrend values
-        
-        Returns:
-            bool: True if successful
-        """
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 5: DETECT FLAT BASE PATTERNS")
-        logger.info("=" * 60)
-        
-        fb_detector = FlatBaseDetector()
-        
-        # Process 125min timeframe
-        if '125min' in self.calculated_data:
-            logger.info("\nDetecting flat bases in 125-minute data...")
-            self.calculated_data['125min'] = fb_detector.calculate_flat_bases_for_symbols(
-                self.calculated_data['125min'],
-                SUPERTREND_CONFIGS_125M
+            
+            # 3. Calculate Percentages
+            logger.info(f"[{timeframe}] Calculating Percentages...")
+            pct_calculator = PercentageCalculator()
+            # Note: process_timeframe_data expects df_by_symbol
+            with_percentages = pct_calculator.process_timeframe_data(
+                calculated_data,
+                configs,
+                timeframe
             )
-        
-        # Process daily timeframe
-        if 'daily' in self.calculated_data:
-            logger.info("\nDetecting flat bases in daily data...")
-            self.calculated_data['daily'] = fb_detector.calculate_flat_bases_for_symbols(
-                self.calculated_data['daily'],
-                SUPERTREND_CONFIGS_DAILY
-            )
-        
-        logger.info("✓ Flat base detection complete")
-        
-        return True
-    
-    def step6_calculate_percentages(self) -> bool:
-        """
-        Step 6: Calculate percentage differences
-        
-        Returns:
-            bool: True if successful
-        """
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 6: CALCULATE PERCENTAGE DIFFERENCES")
-        logger.info("=" * 60)
-        
-        # Initialize percentage calculator
-        pct_calculator = PercentageCalculator()
-        
-        # Prepare configs dict
-        configs_dict = {
-            '125min': SUPERTREND_CONFIGS_125M,
-            'daily': SUPERTREND_CONFIGS_DAILY
-        }
-        
-        # Process all timeframes with percentage calculations
-        self.with_percentages = pct_calculator.process_all_timeframes(
-            self.calculated_data,
-            configs_dict
-        )
-        
-        if not self.with_percentages:
-            logger.error("✗ Failed to calculate percentages")
-            return False
-        
-        # Display statistics for each timeframe
-        for timeframe, df in self.with_percentages.items():
-            pct_calculator.get_statistics(df, timeframe)
-        
-        logger.info("✓ Percentage calculations complete")
-        
-        return True
-    
-    def step7_merge_symbol_info(self) -> bool:
-        """
-        Step 7: Merge with symbol info CSV
-        
-        Returns:
-            bool: True if successful
-        """
-        logger.info("\n" + "=" * 60)
-        logger.info("STEP 7: MERGE WITH SYMBOL INFO")
-        logger.info("=" * 60)
-        
-        # Initialize symbol info merger
-        symbol_merger = SymbolInfoMerger()
-        
-        # Merge all timeframes
-        self.final_data = symbol_merger.merge_all_timeframes(self.with_percentages)
-        
-        if not self.final_data:
-            logger.error("✗ Failed to merge symbol info")
-            return False
-        
-        # Display statistics for each timeframe
-        for timeframe, df in self.final_data.items():
-            symbol_merger.get_statistics(df, timeframe)
-        
-        logger.info("✓ Symbol info merge complete")
-        
-        return True
-    
+            
+            if with_percentages.empty:
+                logger.error(f"[{timeframe}] Percentage calculation failed")
+                return timeframe, None, None, False
+            
+            # 4. Merge Symbol Info
+            logger.info(f"[{timeframe}] Merging Symbol Info...")
+            symbol_merger = SymbolInfoMerger()
+            
+            # Ensure symbol info is loaded
+            if not symbol_merger.load_symbol_info():
+                logger.error(f"[{timeframe}] Failed to load symbol info")
+                return timeframe, None, None, False
+                
+            final_data = symbol_merger.merge_with_data(with_percentages, timeframe)
+            
+            if final_data.empty:
+                logger.error(f"[{timeframe}] Symbol merge failed")
+                return timeframe, None, None, False
+            
+            logger.info(f"[{timeframe}] ✓ PROCESSING COMPLETE")
+            return timeframe, final_data, states, True
+            
+        except Exception as e:
+            logger.error(f"[{timeframe}] Processing failed: {e}", exc_info=True)
+            return timeframe, None, None, False
+
     def step8_upload_to_supabase(self) -> bool:
         """
         Step 8: Upload parquet files to Supabase Storage
@@ -442,24 +388,41 @@ class UpstoxSupertrendPipeline:
                 logger.error("Pipeline failed at Step 3: Fetch Historical Data")
                 return False
             
-            # Step 4: Calculate Supertrend
-            if not self.step4_calculate_supertrend():
-                logger.error("Pipeline failed at Step 4: Calculate Supertrend")
-                return False
+            # PARALLEL PROCESSING OF TIMEFRAMES
+            logger.info("\n" + "=" * 60)
+            logger.info("STARTING PARALLEL PROCESSING OF TIMEFRAMES")
+            logger.info("=" * 60)
             
-            # Step 5: Detect flat base patterns
-            if not self.step5_detect_flat_base():
-                logger.error("Pipeline failed at Step 5: Detect Flat Base")
-                return False
+            from concurrent.futures import ThreadPoolExecutor, as_completed
             
-            # Step 6: Calculate percentages
-            if not self.step6_calculate_percentages():
-                logger.error("Pipeline failed at Step 6: Calculate Percentages")
-                return False
+            timeframes = TIMEFRAME_CONFIG.keys()
+            processing_success = True
             
-            # Step 7: Merge symbol info
-            if not self.step7_merge_symbol_info():
-                logger.error("Pipeline failed at Step 7: Merge Symbol Info")
+            with ThreadPoolExecutor(max_workers=len(timeframes)) as executor:
+                future_to_timeframe = {
+                    executor.submit(self.process_single_timeframe, tf): tf 
+                    for tf in timeframes
+                }
+                
+                for future in as_completed(future_to_timeframe):
+                    tf = future_to_timeframe[future]
+                    try:
+                        timeframe, final_df, states, success = future.result()
+                        
+                        if success:
+                            self.final_data[timeframe] = final_df
+                            self.state_variables[timeframe] = states
+                            logger.info(f"✓ {timeframe} processed successfully")
+                        else:
+                            logger.error(f"✗ {timeframe} processing failed")
+                            processing_success = False
+                            
+                    except Exception as e:
+                        logger.error(f"✗ {tf} generated an exception: {e}")
+                        processing_success = False
+            
+            if not processing_success:
+                logger.error("Pipeline failed during parallel processing")
                 return False
             
             # Step 8: Upload to Supabase Storage

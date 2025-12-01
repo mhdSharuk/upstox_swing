@@ -236,36 +236,24 @@ class HistoricalDataFetcher:
         semaphore: asyncio.Semaphore,
         market_is_open: bool
     ) -> Optional[pd.DataFrame]:
-        """Fetch both historical and intraday data for an instrument"""
+        """Fetch both historical and intraday data for a single instrument"""
         # Fetch historical data
-        historical_df = await self.fetch_candle_data(
-            session,
-            instrument_key,
-            trading_symbol,
-            timeframe,
-            semaphore,
-            is_intraday=False
+        historical_task = self.fetch_candle_data(
+            session, instrument_key, trading_symbol, timeframe, semaphore, is_intraday=False
         )
         
-        # MODIFIED: Always fetch intraday data regardless of market hours
-        intraday_df = await self.fetch_candle_data(
-            session,
-            instrument_key,
-            trading_symbol,
-            timeframe,
-            semaphore,
-            is_intraday=True
+        # Fetch intraday data if market is open or needed
+        # For simplicity and robustness, we always fetch intraday to get the latest candle
+        intraday_task = self.fetch_candle_data(
+            session, instrument_key, trading_symbol, timeframe, semaphore, is_intraday=True
         )
         
-        # Combine both datasets
-        combined_df = self._combine_historical_and_intraday(
-            historical_df,
-            intraday_df,
-            trading_symbol
-        )
+        # Run tasks concurrently
+        historical_df, intraday_df = await asyncio.gather(historical_task, intraday_task)
         
-        return combined_df
-    
+        # Combine data
+        return self._combine_historical_and_intraday(historical_df, intraday_df, trading_symbol)
+
     async def fetch_multiple_instruments(
         self,
         instruments: Dict[str, str],
